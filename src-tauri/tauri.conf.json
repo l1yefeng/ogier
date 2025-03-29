@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "ogier",
+        "title": "Ogier EPUB Reader",
         "width": 800,
         "height": 600
       }
