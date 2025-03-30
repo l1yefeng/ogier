@@ -6,7 +6,5 @@
   "endOfLine": "lf",
   "printWidth": 96,
   "arrowParens": "avoid",
-  "plugins": [
-    "prettier-plugin-organize-imports"
-  ]
+  "plugins": []
 }
