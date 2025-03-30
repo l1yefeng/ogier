@@ -1,7 +1,10 @@
 use base64::{Engine as _, engine::general_purpose};
-use epub::doc::EpubDoc;
+use epub::doc::{EpubDoc, NavPoint};
+use serde::Serialize;
+use serde::ser::SerializeStruct;
 use std::fs::File;
 use std::io::BufReader;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri_plugin_dialog::DialogExt;
 
@@ -14,6 +17,33 @@ impl AppState {
         Self {
             book: Mutex::new(None),
         }
+    }
+}
+
+struct MyNavPoint(NavPoint);
+
+impl Serialize for MyNavPoint {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("NavPoint", 4)?;
+        state.serialize_field("label", &self.0.label)?;
+        state.serialize_field(
+            "content",
+            &self.0.content.to_string_lossy().replace("\\", "/"),
+        )?;
+        state.serialize_field("playOrder", &self.0.play_order)?;
+        state.serialize_field(
+            "children",
+            &self
+                .0
+                .children
+                .iter()
+                .map(|x| MyNavPoint(x.clone()))
+                .collect::<Vec<_>>(),
+        )?;
+        state.end()
     }
 }
 
@@ -44,6 +74,24 @@ fn fetch_resource(_app: tauri::AppHandle, state: tauri::State<AppState>, path: S
         eprintln!("ERR: Unexpected mime type: {}", mime);
         String::new()
     }
+}
+
+#[tauri::command]
+fn get_toc(state: tauri::State<AppState>) -> String {
+    let Ok(mut book_guard) = state.book.lock() else {
+        return String::new();
+    };
+    let book = book_guard.as_mut().unwrap();
+    let toc = book.toc.clone();
+    drop(book_guard);
+
+    serde_json::to_string(&MyNavPoint(NavPoint {
+        label: String::new(),
+        content: PathBuf::new(),
+        children: toc,
+        play_order: 0,
+    }))
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -139,6 +187,7 @@ pub fn run() {
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             fetch_resource,
+            get_toc,
             next_chapter,
             open_epub,
             prev_chapter,

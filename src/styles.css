@@ -1,0 +1,19 @@
+body {
+    margin: 0;
+    height: 100vh;
+}
+
+/* FIXME: the reader is too high */
+#frame {
+    display: flex;
+    height: 100vh;
+    flex-direction: column;
+}
+
+#reader-host {
+    flex: 1;
+}
+
+#toc-nav ol {
+    list-style: none;
+}

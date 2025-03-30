@@ -1,7 +1,31 @@
 import { invoke } from "@tauri-apps/api/core";
 
+interface EpubNavPoint {
+	label: string;
+	content: string;
+	playOrder: number;
+	children: EpubNavPoint[];
+}
+
 let elemClickToOpen: HTMLElement | null;
 let elemReaderHost: HTMLElement | null;
+let elemFrame: HTMLElement | null;
+let elemTocButton: HTMLButtonElement | null;
+let elemTocModal: HTMLDialogElement | null;
+let elemTocNav: HTMLElement | null;
+
+let epubNavRoot: EpubNavPoint | null = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+	elemClickToOpen = document.getElementById("click-to-open");
+	elemReaderHost = document.getElementById("reader-host");
+	elemFrame = document.getElementById("frame");
+	elemTocButton = document.getElementById("toc-button") as HTMLButtonElement;
+	elemTocModal = document.getElementById("toc-dialog") as HTMLDialogElement;
+	elemTocNav = document.getElementById("toc-nav");
+
+	elemClickToOpen!.addEventListener("click", openEpub);
+});
 
 async function renderBookPage(content: string) {
 	const shadowRoot = elemReaderHost?.shadowRoot;
@@ -63,6 +87,34 @@ async function renderBookPage(content: string) {
 	shadowRoot.appendChild(epubPageDoc.body);
 }
 
+function showToc() {
+	elemTocModal!.showModal();
+}
+
+function createNavUi() {
+	const ol = document.createElement("ol");
+	elemTocNav!.appendChild(ol);
+
+	ol.append(...epubNavRoot!.children.map(createNavPoint));
+}
+
+function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
+	const elemNavPoint = document.createElement("li");
+
+	const elemNavAnchor = document.createElement("a");
+	elemNavAnchor.textContent = navPoint.label;
+	elemNavAnchor.href = `epub://${navPoint.content}`;
+	elemNavPoint.appendChild(elemNavAnchor);
+
+	if (navPoint.children.length > 0) {
+		const sub = document.createElement("ol");
+		sub.append(...navPoint.children.map(createNavPoint));
+		elemNavPoint.appendChild(sub);
+	}
+
+	return elemNavPoint;
+}
+
 async function openEpub() {
 	const result: string = await invoke("open_epub");
 	if (!result) {
@@ -70,11 +122,20 @@ async function openEpub() {
 		return;
 	}
 
+	invoke("get_toc").then(result => {
+		if (result) {
+			epubNavRoot = JSON.parse(result as string);
+			createNavUi();
+		}
+	});
+
 	// setup reader
+	elemFrame!.style.display = "";
 	elemClickToOpen!.remove();
 	elemReaderHost!.attachShadow({ mode: "open" });
 
 	document.body.addEventListener("keyup", handleKeyEvent);
+	elemTocButton!.addEventListener("click", showToc);
 
 	renderBookPage(result);
 }
@@ -106,10 +167,3 @@ function handleKeyEvent(event: KeyboardEvent) {
 		goToPrevChapter();
 	}
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-	elemClickToOpen = document.getElementById("click-to-open");
-	elemClickToOpen!.addEventListener("click", openEpub);
-
-	elemReaderHost = document.getElementById("reader-host");
-});

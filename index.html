@@ -10,6 +10,12 @@
 
   <body>
     <h1 id="click-to-open" style="cursor: pointer">Click to open an EPUB.</h1>
-    <div id="reader-host"></div>
+    <div id="frame" style="display: none;">
+      <div id="reader-host"></div>
+      <footer><button id="toc-button">TOC</button></footer>
+      <dialog id="toc-dialog">
+        <nav id="toc-nav"></nav>
+      </dialog>
+    </div>
   </body>
 </html>

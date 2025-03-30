@@ -1,7 +1,10 @@
-# Tauri + Vanilla TS
+# Ogier EPUB Reader
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Typescript.
+## TODO
 
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- [ ] Show footnote in place
+- [ ] Show book details
+- [x] Show toc
+- [ ] Store last read location
+- [ ] Fetch font from archive
+- [ ] Anchors (including toc)
