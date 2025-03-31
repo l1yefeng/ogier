@@ -7,32 +7,33 @@ interface EpubNavPoint {
 	children: EpubNavPoint[];
 }
 
-let elemClickToOpen: HTMLElement | null;
 let elemReaderHost: HTMLElement | null;
 let elemFrame: HTMLElement | null;
 let elemTocButton: HTMLButtonElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
+let elemPreviewModal: HTMLDialogElement | null;
 
+let readerShadowRoot: ShadowRoot | null = null;
 let epubNavRoot: EpubNavPoint | null = null;
 
 document.addEventListener("DOMContentLoaded", () => {
-	elemClickToOpen = document.getElementById("click-to-open");
-	elemReaderHost = document.getElementById("reader-host");
-	elemFrame = document.getElementById("frame");
+	elemFrame = document.getElementById("frame") as HTMLDivElement;
+	elemReaderHost = document.getElementById("reader-host") as HTMLDivElement;
 	elemTocButton = document.getElementById("toc-button") as HTMLButtonElement;
 	elemTocModal = document.getElementById("toc-dialog") as HTMLDialogElement;
-	elemTocNav = document.getElementById("toc-nav");
+	elemTocNav = document.getElementById("toc-nav") as HTMLElement;
+	elemPreviewModal = document.getElementById("preview-dialog") as HTMLDialogElement;
 
-	elemClickToOpen!.addEventListener("click", openEpub);
+	const elemClickToOpen = document.getElementById("click-to-open") as HTMLElement;
+	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
 });
 
 async function renderBookPage(content: string) {
-	const shadowRoot = elemReaderHost?.shadowRoot;
-	if (!shadowRoot) return;
-
 	const parser = new DOMParser();
 	const epubPageDoc = parser.parseFromString(content, "application/xhtml+xml");
+
+	// load all images: <img> and svg <image>
 	for (const elem of epubPageDoc.body.querySelectorAll<HTMLImageElement>(
 		'img[src^="epub://"]',
 	)) {
@@ -40,7 +41,7 @@ async function renderBookPage(content: string) {
 		const path = elem.src.substring(7);
 		invoke("fetch_resource", { path }).then(base64 => {
 			elem.src = `data:${base64 as string}`;
-			elem.style.visibility = "visible";
+			elem.style.visibility = "";
 		});
 	}
 	for (const elem of epubPageDoc.body.querySelectorAll<SVGImageElement>("image")) {
@@ -50,11 +51,12 @@ async function renderBookPage(content: string) {
 			const path = href.substring(7);
 			invoke("fetch_resource", { path }).then(base64 => {
 				elem.href.baseVal = `data:${base64 as string}`;
-				elem.style.visibility = "visible";
+				elem.style.visibility = "";
 			});
 		}
 	}
 
+	// load styles
 	// TODO (optimize) don't need to re-fetch the same <link>
 	const stylesheets: CSSStyleSheet[] = [];
 	// TODO (optimize) parallellize
@@ -68,9 +70,9 @@ async function renderBookPage(content: string) {
 		stylesheets.push(stylesheet);
 	}
 	let styleElemCss = `
-    img {
-        max-width: 100%;
-    }
+		img {
+			max-width: 100%;
+		}
     `;
 	for (const elemStyle of epubPageDoc.head.querySelectorAll<HTMLStyleElement>("style")) {
 		const css = elemStyle.textContent;
@@ -82,9 +84,10 @@ async function renderBookPage(content: string) {
 	stylesheet.replace(styleElemCss);
 	stylesheets.push(stylesheet);
 
-	shadowRoot.adoptedStyleSheets = stylesheets;
-	shadowRoot.replaceChildren();
-	shadowRoot.appendChild(epubPageDoc.body);
+	readerShadowRoot!.adoptedStyleSheets = stylesheets;
+	readerShadowRoot!.replaceChildren();
+	// insert the body
+	readerShadowRoot!.appendChild(epubPageDoc.body);
 }
 
 function showToc() {
@@ -115,13 +118,88 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	return elemNavPoint;
 }
 
-async function openEpub() {
+async function handleClickToOpen(event: PointerEvent) {
 	const result: string = await invoke("open_epub");
 	if (!result) {
 		window.alert("Could not open.");
 		return;
 	}
 
+	// got the book.
+	(event.target as HTMLElement).remove();
+	openEpub(result);
+}
+
+function createLocationPreview(id: string): boolean {
+	const elemLocation = readerShadowRoot!.getElementById(id);
+	if (elemLocation) {
+		let elemLi: HTMLLIElement | null = null;
+		if (elemLocation instanceof HTMLLIElement) {
+			elemLi = elemLocation;
+		} else if (elemLocation.parentElement instanceof HTMLLIElement) {
+			elemLi = elemLocation.parentElement;
+		}
+		if (elemLi) {
+			// clone the element
+			elemLi = elemLi.cloneNode(true) as HTMLLIElement;
+			const elemDiv = document.createElement("div");
+			elemDiv.append(...elemLi.childNodes);
+			elemPreviewModal!.replaceChildren(elemDiv);
+			return true;
+		} else {
+			// TODO
+			return false;
+		}
+	} else {
+		return false;
+	}
+}
+
+/**
+ * @param location path/to/file.xhtml or path/to/file.xhtml#id or path/to/#id
+ */
+function previewLocation(location: string) {
+	const [path, id] = location.split("#");
+	if (id) {
+		// with hash
+		if (path.endsWith("/")) {
+			// current page
+			const elem = readerShadowRoot!.getElementById(id);
+			if (elem) {
+				if (createLocationPreview(id)) {
+					elemPreviewModal!.showModal();
+				}
+			}
+		} else {
+			// TODO
+			console.warn("Unimplemented: preview location");
+		}
+	} else {
+		// without hash
+		console.warn("Unimplemented: preview location");
+	}
+}
+
+function handleClickInReader(event: PointerEvent) {
+	// find the nearest nesting anchor
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	let elemAnchor: Element | null = event.target;
+	while (elemAnchor && !(elemAnchor instanceof HTMLAnchorElement)) {
+		elemAnchor = elemAnchor.parentElement;
+	}
+	if (elemAnchor) {
+		event.preventDefault();
+		const href = elemAnchor.href;
+		if (href.startsWith("epub://")) {
+			// within the reader, always preview the destination
+			previewLocation(href.substring(7));
+		}
+	}
+}
+
+async function openEpub(pageContent: string) {
 	invoke("get_toc").then(result => {
 		if (result) {
 			epubNavRoot = JSON.parse(result as string);
@@ -129,15 +207,17 @@ async function openEpub() {
 		}
 	});
 
-	// setup reader
+	// show reader
 	elemFrame!.style.display = "";
-	elemClickToOpen!.remove();
-	elemReaderHost!.attachShadow({ mode: "open" });
-
+	readerShadowRoot = elemReaderHost!.attachShadow({ mode: "open" });
+	// setup reader event listeners
 	document.body.addEventListener("keyup", handleKeyEvent);
+	readerShadowRoot.addEventListener("click", event =>
+		handleClickInReader(event as PointerEvent),
+	);
 	elemTocButton!.addEventListener("click", showToc);
 
-	renderBookPage(result);
+	renderBookPage(pageContent);
 }
 
 async function goToNextChapter() {
