@@ -26,6 +26,26 @@ document.addEventListener("DOMContentLoaded", () => {
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
 });
 
+function loadImageElement(
+	elem: HTMLImageElement | SVGImageElement,
+	path: string,
+	useDataBase64: (base64: string) => void,
+): void {
+	elem.style.visibility = "hidden";
+	invoke("fetch_resource", { path })
+		.then(base64 => {
+			if (base64) {
+				useDataBase64(base64 as string);
+				elem.style.visibility = "";
+			} else {
+				console.error(`Resource not found: ${path}`);
+			}
+		})
+		.catch(err => {
+			console.error(`Error loading image ${path}:`, err);
+		});
+}
+
 async function renderBookPage(content: string): Promise<void> {
 	const parser = new DOMParser();
 	const epubPageDoc = parser.parseFromString(content, "application/xhtml+xml");
@@ -34,21 +54,15 @@ async function renderBookPage(content: string): Promise<void> {
 	for (const elem of epubPageDoc.body.querySelectorAll<HTMLImageElement>(
 		'img[src^="epub://"]',
 	)) {
-		elem.style.visibility = "hidden";
-		const path = elem.src.substring(7);
-		invoke("fetch_resource", { path }).then(base64 => {
+		loadImageElement(elem, elem.src.substring(7), base64 => {
 			elem.src = `data:${base64 as string}`;
-			elem.style.visibility = "";
 		});
 	}
 	for (const elem of epubPageDoc.body.querySelectorAll<SVGImageElement>("image")) {
 		const href = elem.href.baseVal;
 		if (href.startsWith("epub://")) {
-			elem.style.visibility = "hidden";
-			const path = href.substring(7);
-			invoke("fetch_resource", { path }).then(base64 => {
+			loadImageElement(elem, href.substring(7), base64 => {
 				elem.href.baseVal = `data:${base64 as string}`;
-				elem.style.visibility = "";
 			});
 		}
 	}
@@ -70,7 +84,17 @@ async function renderBookPage(content: string): Promise<void> {
 		'link[rel="stylesheet"]',
 	)) {
 		const path = elemLink.href.substring(7);
-		const css: string = await invoke("fetch_resource", { path });
+		let css: string;
+		try {
+			css = await invoke("fetch_resource", { path });
+		} catch (err) {
+			console.error(`Error loading stylesheet ${path}:`, err);
+			continue;
+		}
+		if (!css) {
+			console.error(`Resource not found: ${path}`);
+			continue;
+		}
 		const stylesheet = new CSSStyleSheet();
 		stylesheet.replace(css);
 		stylesheets.push(stylesheet);
@@ -110,6 +134,7 @@ function createNavUi(): void {
 function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	const elemNavPoint = document.createElement("li");
 
+	// TODO use button that closes the modal, and use the modal return value to navigate
 	const elemNavAnchor = document.createElement("a");
 	elemNavAnchor.textContent = navPoint.label;
 	elemNavAnchor.href = `epub://${navPoint.content}`;
@@ -124,16 +149,18 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	return elemNavPoint;
 }
 
-async function handleClickToOpen(event: PointerEvent): Promise<void> {
-	const result: string = await invoke("open_epub");
-	if (!result) {
-		window.alert("Could not open.");
-		return;
-	}
-
-	// got the book.
-	(event.target as HTMLElement).remove();
-	openEpub(result);
+function handleClickToOpen(event: PointerEvent): void {
+	invoke("open_epub")
+		.then(result => {
+			if (result) {
+				// got the book.
+				(event.target as HTMLElement).remove();
+				openEpub(result as string);
+			}
+		})
+		.catch(err => {
+			window.alert(err);
+		});
 }
 
 function createSamePageLocationPreview(anchor: HTMLElement, id: string): boolean {
@@ -197,12 +224,14 @@ function handleClickInReader(event: PointerEvent): void {
 }
 
 async function openEpub(pageContent: string): Promise<void> {
-	invoke("get_toc").then(result => {
-		if (result) {
-			epubNavRoot = JSON.parse(result as string);
+	invoke("get_toc")
+		.then(result => {
+			epubNavRoot = result as EpubNavPoint;
 			createNavUi();
-		}
-	});
+		})
+		.catch(err => {
+			console.error("Error loading TOC:", err);
+		});
 
 	// show reader
 	elemFrame!.style.display = "";
@@ -217,22 +246,30 @@ async function openEpub(pageContent: string): Promise<void> {
 	renderBookPage(pageContent);
 }
 
-async function goToNextChapter(): Promise<void> {
-	const result: string = await invoke("next_chapter");
-	if (!result) {
-		return; // maybe this is the last chapter
-	}
-
-	renderBookPage(result);
+function goToChapter(command: string, onEmptyResult: () => void): void {
+	invoke(command)
+		.then(result => {
+			if (result) {
+				renderBookPage(result as string);
+			} else {
+				onEmptyResult();
+			}
+		})
+		.catch(err => {
+			console.error("Error loading next chapter:", err);
+		});
 }
 
-async function goToPrevChapter(): Promise<void> {
-	const result: string = await invoke("prev_chapter");
-	if (!result) {
-		return; // maybe this is the first chapter
-	}
+function goToNextChapter(): void {
+	goToChapter("next_chapter", () => {
+		window.alert("This is the last chapter.");
+	});
+}
 
-	renderBookPage(result);
+function goToPrevChapter(): void {
+	goToChapter("prev_chapter", () => {
+		window.alert("This is the first chapter.");
+	});
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {
