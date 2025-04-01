@@ -1,11 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-interface EpubNavPoint {
-	label: string;
-	content: string;
-	playOrder: number;
-	children: EpubNavPoint[];
-}
+import { anchoredSamePageLocation, EpubNavPoint, isLocationNear, repairEpubHref } from "./base";
 
 let elemReaderHost: HTMLElement | null;
 let elemFrame: HTMLElement | null;
@@ -13,6 +8,7 @@ let elemTocButton: HTMLButtonElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
+let elemPreviewContainer: HTMLDivElement | null;
 
 let readerShadowRoot: ShadowRoot | null = null;
 let epubNavRoot: EpubNavPoint | null = null;
@@ -24,12 +20,13 @@ document.addEventListener("DOMContentLoaded", () => {
 	elemTocModal = document.getElementById("toc-dialog") as HTMLDialogElement;
 	elemTocNav = document.getElementById("toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("preview-dialog") as HTMLDialogElement;
+	elemPreviewContainer = document.getElementById("preview-container") as HTMLDivElement;
 
 	const elemClickToOpen = document.getElementById("click-to-open") as HTMLElement;
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
 });
 
-async function renderBookPage(content: string) {
+async function renderBookPage(content: string): Promise<void> {
 	const parser = new DOMParser();
 	const epubPageDoc = parser.parseFromString(content, "application/xhtml+xml");
 
@@ -55,6 +52,15 @@ async function renderBookPage(content: string) {
 			});
 		}
 	}
+
+	// repair anchor element hrefs
+	new Promise(() => {
+		for (const elem of epubPageDoc.body.querySelectorAll<HTMLAnchorElement>(
+			'a[href^="epub://"]',
+		)) {
+			repairEpubHref(elem);
+		}
+	});
 
 	// load styles
 	// TODO (optimize) don't need to re-fetch the same <link>
@@ -90,11 +96,11 @@ async function renderBookPage(content: string) {
 	readerShadowRoot!.appendChild(epubPageDoc.body);
 }
 
-function showToc() {
+function showToc(): void {
 	elemTocModal!.showModal();
 }
 
-function createNavUi() {
+function createNavUi(): void {
 	const ol = document.createElement("ol");
 	elemTocNav!.appendChild(ol);
 
@@ -118,7 +124,7 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	return elemNavPoint;
 }
 
-async function handleClickToOpen(event: PointerEvent) {
+async function handleClickToOpen(event: PointerEvent): Promise<void> {
 	const result: string = await invoke("open_epub");
 	if (!result) {
 		window.alert("Could not open.");
@@ -130,7 +136,7 @@ async function handleClickToOpen(event: PointerEvent) {
 	openEpub(result);
 }
 
-function createLocationPreview(id: string): boolean {
+function createSamePageLocationPreview(anchor: HTMLElement, id: string): boolean {
 	const elemLocation = readerShadowRoot!.getElementById(id);
 	if (elemLocation) {
 		let elemLi: HTMLLIElement | null = null;
@@ -142,9 +148,14 @@ function createLocationPreview(id: string): boolean {
 		if (elemLi) {
 			// clone the element
 			elemLi = elemLi.cloneNode(true) as HTMLLIElement;
-			const elemDiv = document.createElement("div");
-			elemDiv.append(...elemLi.childNodes);
-			elemPreviewModal!.replaceChildren(elemDiv);
+			for (const elem of elemLi.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+				const id = anchoredSamePageLocation(elem)!;
+				if (isLocationNear(id, anchor)) {
+					elem.remove();
+					break;
+				}
+			}
+			elemPreviewContainer!.replaceChildren(...elemLi.childNodes);
 			return true;
 		} else {
 			// TODO
@@ -155,32 +166,16 @@ function createLocationPreview(id: string): boolean {
 	}
 }
 
-/**
- * @param location path/to/file.xhtml or path/to/file.xhtml#id or path/to/#id
- */
-function previewLocation(location: string) {
-	const [path, id] = location.split("#");
-	if (id) {
-		// with hash
-		if (path.endsWith("/")) {
-			// current page
-			const elem = readerShadowRoot!.getElementById(id);
-			if (elem) {
-				if (createLocationPreview(id)) {
-					elemPreviewModal!.showModal();
-				}
-			}
-		} else {
-			// TODO
-			console.warn("Unimplemented: preview location");
+function previewSamePageLocation(anchor: HTMLElement, id: string): void {
+	const elem = readerShadowRoot!.getElementById(id);
+	if (elem) {
+		if (createSamePageLocationPreview(anchor, id)) {
+			elemPreviewModal!.showModal();
 		}
-	} else {
-		// without hash
-		console.warn("Unimplemented: preview location");
 	}
 }
 
-function handleClickInReader(event: PointerEvent) {
+function handleClickInReader(event: PointerEvent): void {
 	// find the nearest nesting anchor
 	if (!(event.target instanceof Element)) {
 		return;
@@ -191,15 +186,17 @@ function handleClickInReader(event: PointerEvent) {
 	}
 	if (elemAnchor) {
 		event.preventDefault();
-		const href = elemAnchor.href;
-		if (href.startsWith("epub://")) {
-			// within the reader, always preview the destination
-			previewLocation(href.substring(7));
+		const samePageId = anchoredSamePageLocation(elemAnchor);
+		if (samePageId) {
+			previewSamePageLocation(elemAnchor, samePageId);
+		} else if (elemAnchor.href.startsWith("epub://")) {
+			// TODO
+			console.warn("Unimplemented: preview location");
 		}
 	}
 }
 
-async function openEpub(pageContent: string) {
+async function openEpub(pageContent: string): Promise<void> {
 	invoke("get_toc").then(result => {
 		if (result) {
 			epubNavRoot = JSON.parse(result as string);
@@ -220,7 +217,7 @@ async function openEpub(pageContent: string) {
 	renderBookPage(pageContent);
 }
 
-async function goToNextChapter() {
+async function goToNextChapter(): Promise<void> {
 	const result: string = await invoke("next_chapter");
 	if (!result) {
 		return; // maybe this is the last chapter
@@ -229,7 +226,7 @@ async function goToNextChapter() {
 	renderBookPage(result);
 }
 
-async function goToPrevChapter() {
+async function goToPrevChapter(): Promise<void> {
 	const result: string = await invoke("prev_chapter");
 	if (!result) {
 		return; // maybe this is the first chapter
@@ -238,7 +235,7 @@ async function goToPrevChapter() {
 	renderBookPage(result);
 }
 
-function handleKeyEvent(event: KeyboardEvent) {
+function handleKeyEvent(event: KeyboardEvent): void {
 	if (event.key === "ArrowRight") {
 		event.preventDefault();
 		goToNextChapter();
