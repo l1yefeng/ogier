@@ -1,6 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { anchoredSamePageLocation, EpubNavPoint, isLocationNear, repairEpubHref } from "./base";
+import {
+	anchoredSamePageLocation,
+	APP_NAME,
+	EpubMetadata,
+	EpubNavPoint,
+	isLocationNear,
+	repairEpubHref,
+} from "./base";
+
+// Elements. Initialized in DOMContentLoaded listener.
+//
 
 let elemReaderHost: HTMLElement | null;
 let elemFrame: HTMLElement | null;
@@ -10,8 +20,14 @@ let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
 
+// Other global variables. Lazily initialized.
+//
+
+// See openEpub() for initialization.
 let readerShadowRoot: ShadowRoot | null = null;
+// See initToc() for initialization.
 let epubNavRoot: EpubNavPoint | null = null;
+let epubMetadata: EpubMetadata | null;
 
 document.addEventListener("DOMContentLoaded", () => {
 	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
@@ -244,15 +260,48 @@ function handleClickInReader(event: PointerEvent): void {
 	}
 }
 
+async function initMetadata(): Promise<void> {
+	let result: EpubMetadata;
+	try {
+		result = await invoke("get_metadata");
+	} catch (err) {
+		console.error("Error loading metadata:", err);
+		return;
+	}
+	epubMetadata = result;
+
+	// apply to context
+	if (epubMetadata.language) {
+		const lang = epubMetadata.language[0];
+		if (lang) {
+			elemReaderHost!.lang = lang;
+			elemTocNav!.lang = lang;
+			elemPreviewDiv!.lang = lang;
+		}
+	}
+	if (epubMetadata.title) {
+		const epubTitleDisplay = epubMetadata.title.filter(t => t).join(" · ");
+		if (epubTitleDisplay) {
+			document.title = `${epubTitleDisplay} - ${APP_NAME}`;
+		}
+	}
+}
+
+async function initToc(): Promise<void> {
+	let result: EpubNavPoint;
+	try {
+		result = await invoke("get_toc");
+	} catch (err) {
+		console.error("Error loading TOC:", err);
+		return;
+	}
+	epubNavRoot = result;
+	createNavUi();
+}
+
 async function openEpub(pageContent: string): Promise<void> {
-	invoke("get_toc")
-		.then(result => {
-			epubNavRoot = result as EpubNavPoint;
-			createNavUi();
-		})
-		.catch(err => {
-			console.error("Error loading TOC:", err);
-		});
+	initToc();
+	initMetadata();
 
 	// show reader
 	elemFrame!.style.display = "";

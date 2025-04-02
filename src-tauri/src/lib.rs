@@ -2,6 +2,7 @@ use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, NavPoint};
 use serde::Serialize;
 use serde::ser::SerializeStruct;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -87,9 +88,15 @@ fn book_get_resource_and_mime(
 }
 
 fn book_get_toc(state: &tauri::State<AppState>) -> CmdResult<Vec<NavPoint>> {
-    let mut book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    let book = book_guard.as_mut().unwrap();
+    let book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = book_guard.as_ref().unwrap();
     Ok(book.toc.clone())
+}
+
+fn book_get_metadata(state: &tauri::State<AppState>) -> CmdResult<HashMap<String, Vec<String>>> {
+    let book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = book_guard.as_ref().unwrap();
+    Ok(book.metadata.clone())
 }
 
 fn book_navigate(state: &tauri::State<AppState>, command: NavigateOp) -> CmdResult<bool> {
@@ -160,14 +167,6 @@ fn open_epub(
         }
         _ => CmdErr::InvalidEpub,
     })?;
-    for (id, (path, mime)) in book.resources.iter() {
-        println!(
-            "Resource #{}\t{} ({})",
-            id,
-            path.to_str().unwrap_or("(non utf8 path)"),
-            mime
-        );
-    }
     if let Some(title) = book.mdata("title") {
         window.set_title(&title.to_string()).unwrap_or_else(|err| {
             eprintln!("ERR: Failed to set window title: {}.", err);
@@ -203,6 +202,11 @@ fn jump_to_chapter(state: tauri::State<AppState>, path: String) -> CmdResult<Str
     goto_chapter(state, NavigateOp::JumpTo(path))
 }
 
+#[tauri::command]
+fn get_metadata(state: tauri::State<AppState>) -> CmdResult<HashMap<String, Vec<String>>> {
+    book_get_metadata(&state)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -211,6 +215,7 @@ pub fn run() {
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             fetch_resource,
+            get_metadata,
             get_toc,
             jump_to_chapter,
             next_chapter,

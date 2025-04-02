@@ -1,9 +1,13 @@
+export const APP_NAME = "Ogier EPUB Reader";
+
 export interface EpubNavPoint {
 	label: string;
 	content: string;
 	playOrder: number;
 	children: EpubNavPoint[];
 }
+
+export type EpubMetadata = Record<string, string[]>;
 
 /**
  * Checks if `locationId` matches `elem` or nearby elements.
