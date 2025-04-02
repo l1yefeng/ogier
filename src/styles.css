@@ -1,19 +1,19 @@
-body {
+#og-body {
     margin: 0;
-    height: 100vh;
 }
 
 /* FIXME: the reader is too high */
-#frame {
+#og-frame {
     display: flex;
     height: 100vh;
     flex-direction: column;
 }
 
-#reader-host {
+#og-reader-host {
     flex: 1;
+    overflow-y: auto;
 }
 
-#toc-nav ol {
+#og-toc-nav ol {
     list-style: none;
 }

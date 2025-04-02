@@ -8,18 +8,20 @@
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
-  <body>
-    <h1 id="click-to-open" style="cursor: pointer">Click to open an EPUB.</h1>
-    <div id="frame" style="display: none;">
-      <div id="reader-host"></div>
-      <footer><button id="toc-button">TOC</button></footer>
-      <dialog id="toc-dialog">
+  <body id="og-body">
+    <h1 id="og-click-to-open" style="cursor: pointer">Click to open an EPUB.</h1>
+    <div id="og-frame" style="display: none;">
+      <div id="og-reader-host"></div>
+      <footer id="og-footer">
+        <button id="og-toc-button">TOC</button>
+      </footer>
+      <dialog id="og-toc-modal">
         <form method="dialog">
-          <nav id="toc-nav"></nav>
+          <nav id="og-toc-nav"></nav>
         </form>
       </dialog>
-      <dialog id="preview-dialog">
-        <div id="preview-container"></div>
+      <dialog id="og-preview-modal">
+        <div id="og-preview-div"></div>
       </dialog>
     </div>
   </body>

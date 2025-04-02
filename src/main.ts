@@ -8,21 +8,21 @@ let elemTocButton: HTMLButtonElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
-let elemPreviewContainer: HTMLDivElement | null;
+let elemPreviewDiv: HTMLDivElement | null;
 
 let readerShadowRoot: ShadowRoot | null = null;
 let epubNavRoot: EpubNavPoint | null = null;
 
 document.addEventListener("DOMContentLoaded", () => {
-	elemFrame = document.getElementById("frame") as HTMLDivElement;
-	elemReaderHost = document.getElementById("reader-host") as HTMLDivElement;
-	elemTocButton = document.getElementById("toc-button") as HTMLButtonElement;
-	elemTocModal = document.getElementById("toc-dialog") as HTMLDialogElement;
-	elemTocNav = document.getElementById("toc-nav") as HTMLElement;
-	elemPreviewModal = document.getElementById("preview-dialog") as HTMLDialogElement;
-	elemPreviewContainer = document.getElementById("preview-container") as HTMLDivElement;
+	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
+	elemReaderHost = document.getElementById("og-reader-host") as HTMLDivElement;
+	elemTocButton = document.getElementById("og-toc-button") as HTMLButtonElement;
+	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
+	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
+	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
+	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
 
-	const elemClickToOpen = document.getElementById("click-to-open") as HTMLElement;
+	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
 });
 
@@ -203,7 +203,7 @@ function createSamePageLocationPreview(anchor: HTMLElement, id: string): boolean
 					break;
 				}
 			}
-			elemPreviewContainer!.replaceChildren(...elemLi.childNodes);
+			elemPreviewDiv!.replaceChildren(...elemLi.childNodes);
 			return true;
 		} else {
 			// TODO
