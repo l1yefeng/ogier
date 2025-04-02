@@ -15,28 +15,31 @@ import {
 let elemReaderHost: HTMLElement | null;
 let elemFrame: HTMLElement | null;
 let elemTocButton: HTMLButtonElement | null;
+let elemDetailsButton: HTMLButtonElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
+let elemDetailsModal: HTMLDialogElement | null;
+let elemBookDetailsTable: HTMLTableElement | null;
 
 // Other global variables. Lazily initialized.
 //
 
 // See openEpub() for initialization.
 let readerShadowRoot: ShadowRoot | null = null;
-// See initToc() for initialization.
-let epubNavRoot: EpubNavPoint | null = null;
-let epubMetadata: EpubMetadata | null;
 
 document.addEventListener("DOMContentLoaded", () => {
 	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
 	elemReaderHost = document.getElementById("og-reader-host") as HTMLDivElement;
 	elemTocButton = document.getElementById("og-toc-button") as HTMLButtonElement;
+	elemDetailsButton = document.getElementById("og-details-button") as HTMLButtonElement;
 	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
 	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
+	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
+	elemBookDetailsTable = document.getElementById("og-book-details") as HTMLTableElement;
 
 	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
@@ -136,15 +139,11 @@ async function renderBookPage(content: string): Promise<void> {
 	readerShadowRoot!.appendChild(epubPageDoc.body);
 }
 
-function showToc(): void {
-	elemTocModal!.showModal();
-}
-
-function createNavUi(): void {
+function createNavUi(navRoot: EpubNavPoint): void {
 	const ol = document.createElement("ol");
-	elemTocNav!.appendChild(ol);
+	elemTocNav!.replaceChildren(ol);
 
-	ol.append(...epubNavRoot!.children.map(createNavPoint));
+	ol.append(...navRoot.children.map(createNavPoint));
 
 	elemTocModal!.addEventListener("close", async () => {
 		const value = elemTocModal!.returnValue;
@@ -260,6 +259,55 @@ function handleClickInReader(event: PointerEvent): void {
 	}
 }
 
+function refreshUiWithBookMetadata(metadata: EpubMetadata): void {
+	if (metadata.language) {
+		const lang = metadata.language[0];
+		if (lang) {
+			elemReaderHost!.lang = lang;
+			elemTocNav!.lang = lang;
+			elemPreviewDiv!.lang = lang;
+		}
+	}
+	if (metadata.title) {
+		const epubTitleDisplay = metadata.title.filter(t => t).join(" · ");
+		if (epubTitleDisplay) {
+			document.title = `${epubTitleDisplay} - ${APP_NAME}`;
+		}
+	}
+}
+
+function createBookDetailsUi(metadata: EpubMetadata): void {
+	elemBookDetailsTable!.replaceChildren(
+		...Object.entries(metadata).map(([key, values]) => {
+			const tr = document.createElement("tr");
+			const th = document.createElement("th");
+			const td = document.createElement("td");
+			tr.append(th, td);
+
+			th.textContent = key;
+
+			if (values) {
+				if (values.length > 1) {
+					// use a list
+					const ul = document.createElement("ul");
+					td.appendChild(ul);
+					ul.append(
+						...values.map(v => {
+							const li = document.createElement("li");
+							li.textContent = v;
+							return li;
+						}),
+					);
+				} else {
+					td.textContent = values[0];
+				}
+			}
+
+			return tr;
+		}),
+	);
+}
+
 async function initMetadata(): Promise<void> {
 	let result: EpubMetadata;
 	try {
@@ -268,23 +316,9 @@ async function initMetadata(): Promise<void> {
 		console.error("Error loading metadata:", err);
 		return;
 	}
-	epubMetadata = result;
 
-	// apply to context
-	if (epubMetadata.language) {
-		const lang = epubMetadata.language[0];
-		if (lang) {
-			elemReaderHost!.lang = lang;
-			elemTocNav!.lang = lang;
-			elemPreviewDiv!.lang = lang;
-		}
-	}
-	if (epubMetadata.title) {
-		const epubTitleDisplay = epubMetadata.title.filter(t => t).join(" · ");
-		if (epubTitleDisplay) {
-			document.title = `${epubTitleDisplay} - ${APP_NAME}`;
-		}
-	}
+	refreshUiWithBookMetadata(result);
+	createBookDetailsUi(result);
 }
 
 async function initToc(): Promise<void> {
@@ -295,8 +329,7 @@ async function initToc(): Promise<void> {
 		console.error("Error loading TOC:", err);
 		return;
 	}
-	epubNavRoot = result;
-	createNavUi();
+	createNavUi(result);
 }
 
 async function openEpub(pageContent: string): Promise<void> {
@@ -311,7 +344,12 @@ async function openEpub(pageContent: string): Promise<void> {
 	readerShadowRoot.addEventListener("click", event =>
 		handleClickInReader(event as PointerEvent),
 	);
-	elemTocButton!.addEventListener("click", showToc);
+	elemTocButton!.addEventListener("click", () => {
+		elemTocModal!.showModal();
+	});
+	elemDetailsButton!.addEventListener("click", () => {
+		elemDetailsModal!.showModal();
+	});
 
 	renderBookPage(pageContent);
 }
