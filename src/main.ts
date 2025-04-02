@@ -129,16 +129,37 @@ function createNavUi(): void {
 	elemTocNav!.appendChild(ol);
 
 	ol.append(...epubNavRoot!.children.map(createNavPoint));
+
+	elemTocModal!.addEventListener("close", async () => {
+		const value = elemTocModal!.returnValue;
+		if (value) {
+			const [path, locationId] = value.split("#", 2);
+			let content: string;
+			try {
+				content = await invoke("jump_to_chapter", { path });
+			} catch (err) {
+				console.error(`Error jumping to ${path}:`, err);
+				return;
+			}
+			if (!content) {
+				console.error(`Page not found: ${path}`);
+				return;
+			}
+			await renderBookPage(content);
+			if (locationId) {
+				readerShadowRoot!.getElementById(locationId)?.scrollIntoView();
+			}
+		}
+	});
 }
 
 function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	const elemNavPoint = document.createElement("li");
 
-	// TODO use button that closes the modal, and use the modal return value to navigate
-	const elemNavAnchor = document.createElement("a");
-	elemNavAnchor.textContent = navPoint.label;
-	elemNavAnchor.href = `epub://${navPoint.content}`;
-	elemNavPoint.appendChild(elemNavAnchor);
+	const elemNavBtn = document.createElement("button");
+	elemNavBtn.textContent = navPoint.label;
+	elemNavBtn.value = navPoint.content;
+	elemNavPoint.appendChild(elemNavBtn);
 
 	if (navPoint.children.length > 0) {
 		const sub = document.createElement("ol");
