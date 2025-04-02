@@ -2,14 +2,17 @@ use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, NavPoint};
 use serde::Serialize;
 use serde::ser::SerializeStruct;
-use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri_plugin_dialog::DialogExt;
+use std::{collections::HashMap, hash::Hasher};
+use tauri_plugin_dialog::{DialogExt, FilePath};
+use tauri_plugin_store::StoreExt;
+use twox_hash::XxHash64;
 
 type Epub = EpubDoc<BufReader<File>>;
+type EpubHash = arrayvec::ArrayString<16>;
 
 #[derive(Serialize)]
 enum CmdErr {
@@ -24,19 +27,24 @@ enum NavigateOp {
     Next,
     Prev,
     JumpTo(String),
+    JumpToChapter(usize),
 }
 
-struct AppState {
-    book: Mutex<Option<Epub>>,
+struct AppData {
+    book: Option<Epub>,
+    book_hash: EpubHash,
 }
 
-impl AppState {
+impl AppData {
     fn new() -> Self {
         Self {
-            book: Mutex::new(None),
+            book: None,
+            book_hash: EpubHash::new(),
         }
     }
 }
+
+type AppState = Mutex<AppData>;
 
 struct MyNavPoint(NavPoint);
 
@@ -62,15 +70,18 @@ impl Serialize for MyNavPoint {
     }
 }
 
-fn set_book(state: &tauri::State<AppState>, book: Epub) -> CmdResult<()> {
-    let mut book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    *book_guard = Some(book);
+const PROGRESS_STORE: &str = "progress.json";
+
+fn set_book(state: &tauri::State<AppState>, book: Epub, hash: EpubHash) -> CmdResult<()> {
+    let mut state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    state.book = Some(book);
+    state.book_hash = hash;
     Ok(())
 }
 
 fn book_get_current(state: &tauri::State<AppState>) -> CmdResult<Vec<u8>> {
-    let mut book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    let book = book_guard.as_mut().unwrap();
+    let mut state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = state.book.as_mut().unwrap();
     book.get_current_with_epub_uris()
         .map_err(|_| CmdErr::InvalidEpub)
 }
@@ -79,8 +90,8 @@ fn book_get_resource_and_mime(
     state: &tauri::State<AppState>,
     path: &str,
 ) -> CmdResult<(Option<Vec<u8>>, Option<String>)> {
-    let mut book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    let book = book_guard.as_mut().unwrap();
+    let mut state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = state.book.as_mut().unwrap();
     Ok((
         book.get_resource_by_path(&path),
         book.get_resource_mime_by_path(&path),
@@ -88,20 +99,20 @@ fn book_get_resource_and_mime(
 }
 
 fn book_get_toc(state: &tauri::State<AppState>) -> CmdResult<Vec<NavPoint>> {
-    let book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    let book = book_guard.as_ref().unwrap();
+    let state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = state.book.as_ref().unwrap();
     Ok(book.toc.clone())
 }
 
 fn book_get_metadata(state: &tauri::State<AppState>) -> CmdResult<HashMap<String, Vec<String>>> {
-    let book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    let book = book_guard.as_ref().unwrap();
+    let state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = state.book.as_ref().unwrap();
     Ok(book.metadata.clone())
 }
 
 fn book_navigate(state: &tauri::State<AppState>, command: NavigateOp) -> CmdResult<bool> {
-    let mut book_guard = state.book.lock().map_err(|_| CmdErr::NotSureWhat)?;
-    let book = book_guard.as_mut().unwrap();
+    let mut state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = state.book.as_mut().unwrap();
     Ok(match command {
         NavigateOp::Next => book.go_next(),
         NavigateOp::Prev => book.go_prev(),
@@ -109,7 +120,44 @@ fn book_navigate(state: &tauri::State<AppState>, command: NavigateOp) -> CmdResu
             .resource_uri_to_chapter(&PathBuf::from(path))
             .map(|num| book.set_current_page(num))
             .unwrap_or_default(),
+        NavigateOp::JumpToChapter(n) => book.set_current_page(n),
     })
+}
+
+fn book_save_progress(app: tauri::AppHandle, state: &tauri::State<AppState>) -> CmdResult<()> {
+    let state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
+    let book = state.book.as_ref().unwrap();
+    let chapter_num = book.get_current_page();
+    let book_hash = &state.book_hash;
+
+    // Save progress to the store
+    let progress = app.store(PROGRESS_STORE).map_err(|_| CmdErr::NotSureWhat)?;
+    progress.set(book_hash.as_str(), chapter_num);
+    Ok(())
+}
+
+fn compute_book_hash(filepath: &PathBuf) -> CmdResult<EpubHash> {
+    let mut hasher = XxHash64::with_seed(0);
+
+    let file = File::open(filepath).map_err(|_| CmdErr::FileNotOpened)?;
+    let mut reader = BufReader::new(file);
+
+    let mut buffer = [0u8; 8 * 1024];
+    let mut remains = 1 << 20;
+    while remains > 0 {
+        let to_read = remains.min(buffer.len());
+        let read = reader
+            .read(&mut buffer[..to_read])
+            .map_err(|_| CmdErr::FileNotOpened)?;
+        if read == 0 {
+            break;
+        }
+        hasher.write(&buffer[..read]);
+        remains -= read;
+    }
+
+    let hash = hasher.finish();
+    Ok(EpubHash::from(&format!("{:016x}", hash)).unwrap())
 }
 
 #[tauri::command]
@@ -159,47 +207,73 @@ fn open_epub(
     else {
         return Ok(String::new()); // file picking was cancelled
     };
+    let FilePath::Path(filepath) = file_path else {
+        return Ok(String::new()); // TODO unimplemented
+    };
     // open file
-    let book = EpubDoc::new(&file_path.to_string()).map_err(|err| match err {
+    let book = EpubDoc::new(&filepath).map_err(|err| match err {
         DocError::IOError(err) => {
             eprintln!("ERR: Failed to open file: {}", err);
             CmdErr::FileNotOpened
         }
         _ => CmdErr::InvalidEpub,
     })?;
+    // TODO(optimize) async
     if let Some(title) = book.mdata("title") {
         window.set_title(&title.to_string()).unwrap_or_else(|err| {
             eprintln!("ERR: Failed to set window title: {}.", err);
         });
     }
 
-    set_book(&state, book)?;
+    let book_hash = compute_book_hash(&filepath)?;
+    set_book(&state, book, book_hash)?;
+
+    // retrieve progress. this happens only once
+    let progress = app.store(PROGRESS_STORE).map_err(|_| CmdErr::NotSureWhat)?;
+
+    if let Some(serde_json::Value::Number(num)) = progress.get(book_hash) {
+        // use read progress
+        if let Some(chapter_num) = num.as_u64() {
+            let _changed = book_navigate(&state, NavigateOp::JumpToChapter(chapter_num as usize))?;
+        }
+    }
+
+    book_save_progress(app, &state)?;
     let content = book_get_current(&state)?;
 
     String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)
 }
 
-fn goto_chapter(state: tauri::State<AppState>, command: NavigateOp) -> CmdResult<String> {
+fn goto_chapter(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    command: NavigateOp,
+) -> CmdResult<String> {
     if !book_navigate(&state, command)? {
         return Ok(String::new());
     }
+    book_save_progress(app, &state)?;
     let content = book_get_current(&state)?;
     String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)
 }
 
 #[tauri::command]
-fn next_chapter(state: tauri::State<AppState>) -> CmdResult<String> {
-    goto_chapter(state, NavigateOp::Next)
+fn next_chapter(app: tauri::AppHandle, state: tauri::State<AppState>) -> CmdResult<String> {
+    goto_chapter(app, state, NavigateOp::Next)
 }
 
 #[tauri::command]
-fn prev_chapter(state: tauri::State<AppState>) -> CmdResult<String> {
-    goto_chapter(state, NavigateOp::Prev)
+fn prev_chapter(app: tauri::AppHandle, state: tauri::State<AppState>) -> CmdResult<String> {
+    goto_chapter(app, state, NavigateOp::Prev)
 }
 
 #[tauri::command]
-fn jump_to_chapter(state: tauri::State<AppState>, path: String) -> CmdResult<String> {
-    goto_chapter(state, NavigateOp::JumpTo(path))
+fn jump_to_chapter(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    path: String,
+) -> CmdResult<String> {
+    goto_chapter(app, state, NavigateOp::JumpTo(path))
 }
 
 #[tauri::command]
@@ -210,9 +284,10 @@ fn get_metadata(state: tauri::State<AppState>) -> CmdResult<HashMap<String, Vec<
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState::new())
+        .manage(Mutex::new(AppData::new()))
         .invoke_handler(tauri::generate_handler![
             fetch_resource,
             get_metadata,
