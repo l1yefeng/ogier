@@ -51,7 +51,7 @@ function loadImageElement(
 	useDataBase64: (base64: string) => void,
 ): void {
 	elem.style.visibility = "hidden";
-	invoke("fetch_resource", { path })
+	invoke("get_resource", { path })
 		.then(base64 => {
 			if (base64) {
 				useDataBase64(base64 as string);
@@ -105,7 +105,7 @@ async function renderBookPage(content: string): Promise<void> {
 		const path = elemLink.href.substring(7);
 		let css: string;
 		try {
-			css = await invoke("fetch_resource", { path });
+			css = await invoke("get_resource", { path });
 		} catch (err) {
 			console.error(`Error loading stylesheet ${path}:`, err);
 			continue;
@@ -129,6 +129,11 @@ async function renderBookPage(content: string): Promise<void> {
 			styleElemCss += css;
 		}
 	}
+	try {
+		styleElemCss += await invoke("get_custom_stylesheet");
+	} catch (err) {
+		console.error("Error loading custom CSS:", err);
+	}
 	const stylesheet = new CSSStyleSheet();
 	stylesheet.replace(styleElemCss);
 	stylesheets.push(stylesheet);
@@ -151,7 +156,7 @@ function createNavUi(navRoot: EpubNavPoint): void {
 			const [path, locationId] = value.split("#", 2);
 			let content: string;
 			try {
-				content = await invoke("jump_to_chapter", { path });
+				content = await invoke("navigate_to", { path });
 			} catch (err) {
 				console.error(`Error jumping to ${path}:`, err);
 				return;
@@ -369,13 +374,13 @@ function goToChapter(command: string, onEmptyResult: () => void): void {
 }
 
 function goToNextChapter(): void {
-	goToChapter("next_chapter", () => {
+	goToChapter("navigate_next", () => {
 		window.alert("This is the last chapter.");
 	});
 }
 
 function goToPrevChapter(): void {
-	goToChapter("prev_chapter", () => {
+	goToChapter("navigate_prev", () => {
 		window.alert("This is the first chapter.");
 	});
 }
