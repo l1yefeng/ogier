@@ -4,8 +4,12 @@ Small and fast.
 
 ## TODO
 
-- [ ] Store last read location
-- [ ] Redaer style: line height, margin, and font
+- [x] Store last read location: which page
+- [ ] Store last read location: which line
+- [ ] Reader style: line height
+- [ ] Reader style: margin
+- [x] Reader style: font
+- [ ] Reader style: line height, margin, and font
 - [ ] UI style
 - [x] Show footnote in place
 - [x] Show book details

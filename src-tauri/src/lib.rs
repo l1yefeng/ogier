@@ -1,3 +1,5 @@
+mod css;
+
 use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, NavPoint};
 use serde::Serialize;
@@ -8,8 +10,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::{collections::HashMap, hash::Hasher};
 use tauri_plugin_dialog::{DialogExt, FilePath};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
+
+use css::regulate_css;
 
 type Epub = EpubDoc<BufReader<File>>;
 type EpubHash = arrayvec::ArrayString<16>;
@@ -149,7 +154,12 @@ fn get_resource(state: tauri::State<AppState>, path: String) -> CmdResult<String
         general_purpose::STANDARD.encode_string(content, &mut buf);
         Ok(buf)
     } else if mime.starts_with("text/") {
-        String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)
+        let content = String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)?;
+        if path.ends_with(".css") {
+            Ok(regulate_css(&content).unwrap_or(content))
+        } else {
+            Ok(content)
+        }
     } else {
         eprintln!("ERR: Unsupported MIME type: {}", mime);
         Ok(String::new())
@@ -211,16 +221,32 @@ fn get_metadata(state: tauri::State<AppState>) -> CmdResult<HashMap<String, Vec<
     Ok(book.metadata.clone())
 }
 
-#[tauri::command]
-fn get_custom_stylesheet(
-    app: tauri::AppHandle,
-    state: tauri::State<AppState>,
-) -> CmdResult<String> {
+fn custom_stylesheet_path(
+    app: &tauri::AppHandle,
+    state: &tauri::State<AppState>,
+) -> CmdResult<PathBuf> {
     let mut css_path = {
         let state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
         resolve_store_path(&app, state.book_hash).map_err(|_| CmdErr::NotSureWhat)?
     };
     css_path.set_extension("css");
+    Ok(css_path)
+}
+
+#[tauri::command]
+fn open_custom_stylesheet(app: tauri::AppHandle, state: tauri::State<AppState>) -> CmdResult<()> {
+    let css_path = custom_stylesheet_path(&app, &state)?;
+    app.opener()
+        .open_path(css_path.to_string_lossy(), None::<&str>)
+        .map_err(|_| CmdErr::NotSureWhat)
+}
+
+#[tauri::command]
+fn get_custom_stylesheet(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> CmdResult<String> {
+    let css_path = custom_stylesheet_path(&app, &state)?;
     Ok(std::fs::read_to_string(css_path).map_or_else(|_| String::new(), |css| css))
 }
 
@@ -294,6 +320,7 @@ pub fn run() {
             navigate_next,
             navigate_prev,
             navigate_to,
+            open_custom_stylesheet,
             open_epub,
         ])
         .run(tauri::generate_context!())
