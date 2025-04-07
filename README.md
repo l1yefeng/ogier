@@ -4,6 +4,9 @@ Small and fast.
 
 ## TODO
 
+- [ ] BUG: Page location should be 0 when next page, not the same
+- [ ] CSS absolute length other than px
+- [x] Fix menu item
 - [x] Store last read location: which page
 - [ ] Store last read location: which line
 - [ ] Reader style: line height

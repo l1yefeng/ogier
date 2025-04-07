@@ -9,6 +9,8 @@ use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::{collections::HashMap, hash::Hasher};
+use tauri::Manager;
+use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{StoreExt, resolve_store_path};
@@ -299,10 +301,60 @@ fn open_epub(
         }
     }
 
+    if let Some(menu) = window.menu() {
+        let reader_submenu = menu.get("reader").unwrap();
+        reader_submenu
+            .as_submenu_unchecked()
+            .set_enabled(true)
+            .map_err(|_| CmdErr::NotSureWhat)?;
+    }
+
     book_save_progress(app, &state)?;
     let content = book_get_current(&state)?;
 
     String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)
+}
+
+fn setup_menu(app: &mut tauri::App) -> Result<(), Box<(dyn std::error::Error + 'static)>> {
+    let handle = app.handle();
+    let menu = Menu::new(handle)?;
+    let file_submenu = SubmenuBuilder::new(handle, "File")
+        .id("file")
+        .item(
+            &MenuItemBuilder::new("&Open EPUB")
+                .id("file::open-epub")
+                .build(handle)?,
+        )
+        .build()?;
+    let reader_submenu = SubmenuBuilder::new(handle, "Reader")
+        .id("reader")
+        .item(
+            &MenuItemBuilder::new("Open &Custom Stylesheet")
+                .id("reader::open-custom-stylesheet")
+                .build(handle)?,
+        )
+        .enabled(false)
+        .build()?;
+    menu.append_items(&[&file_submenu, &reader_submenu])?;
+    app.set_menu(menu)?;
+    app.on_menu_event(move |handle, event| match event.id().0.as_str() {
+        "file::open-epub" => {
+            println!("Open EPUB: Unimplemented");
+        }
+        "reader::open-custom-stylesheet" => {
+            let state = handle.state();
+            if let Ok(css_path) = custom_stylesheet_path(handle, &state) {
+                if let Err(err) = handle
+                    .opener()
+                    .open_path(css_path.to_string_lossy(), None::<&str>)
+                {
+                    eprintln!("ERR: Failed to open custom stylesheet: {}", err);
+                }
+            }
+        }
+        _ => {}
+    });
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -312,6 +364,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppData::new()))
+        .setup(setup_menu)
         .invoke_handler(tauri::generate_handler![
             get_custom_stylesheet,
             get_metadata,

@@ -16,7 +16,6 @@ let elemReaderHost: HTMLElement | null;
 let elemFrame: HTMLElement | null;
 let elemTocButton: HTMLButtonElement | null;
 let elemDetailsButton: HTMLButtonElement | null;
-let elemCustomCssButton: HTMLButtonElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
@@ -35,7 +34,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	elemReaderHost = document.getElementById("og-reader-host") as HTMLDivElement;
 	elemTocButton = document.getElementById("og-toc-button") as HTMLButtonElement;
 	elemDetailsButton = document.getElementById("og-details-button") as HTMLButtonElement;
-	elemCustomCssButton = document.getElementById("og-custom-css-button") as HTMLButtonElement;
 	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
@@ -343,13 +341,6 @@ async function initToc(): Promise<void> {
 async function openEpub(pageContent: string): Promise<void> {
 	initToc();
 	initMetadata();
-	elemCustomCssButton!.addEventListener("click", () => {
-		try {
-			invoke("open_custom_stylesheet");
-		} catch (err) {
-			console.error("Error opening custom CSS:", err);
-		}
-	});
 
 	// show reader
 	elemFrame!.style.display = "";
