@@ -1,41 +1,51 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ogier EPUB Reader</title>
-    <script type="module" src="/src/main.ts" defer></script>
-  </head>
 
-  <body id="og-body">
-    <h1 id="og-click-to-open" style="cursor: pointer">Click to open an EPUB.</h1>
-    <div id="og-frame" style="display: none;">
-      <div id="og-reader-host"></div>
-      <footer id="og-footer">
-        <button id="og-toc-button">Table of content</button>
-        <button id="og-details-button">Details</button>
-        <code id="og-spine-position"></code>
-        <label>
-          Font size:
-          <input type="number" name="og-font-size" id="og-font-size" min="8" max="72" step="1" value="16">
-        </label>
-        <label>
-          Spacing:
-          <input type="number" name="og-spacing" id="og-spacing" min="20" max="800" step="10" value="100">
-        </label>
-      </footer>
-      <dialog id="og-toc-modal">
-        <form method="dialog">
-          <nav id="og-toc-nav">Loading...</nav>
-        </form>
-      </dialog>
-      <dialog id="og-preview-modal">
-        <div id="og-preview-div"></div>
-      </dialog>
-      <dialog id="og-details-modal">
-        <table id="og-book-details"></table>
-      </dialog>
-    </div>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="/src/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ogier EPUB Reader</title>
+  <script type="module" src="/src/main.ts" defer></script>
+</head>
+
+<body id="og-body">
+  <h1 id="og-click-to-open" style="cursor: pointer">
+    Click to open an EPUB.
+  </h1>
+  <div id="og-frame" style="display: none;">
+    <div id="og-reader-host"></div>
+    <footer id="og-footer">
+      <button id="og-toc-button">
+        <img height="16" src="/src/assets/fluent/book_24_regular.svg">
+        Table of Content
+      </button>
+      <button id="og-details-button">
+        Details
+      </button>
+      <code id="og-spine-position"></code>
+      <label>
+        <img height="16" src="/src/assets/fluent/text_font_size_24_regular.svg">
+        <input type="number" name="og-font-size" id="og-font-size" min="8" max="72" step="1" value="16" width="6">
+      </label>
+      <label>
+        <img height="16" src="/src/assets/fluent/text_line_spacing_24_regular.svg">
+        <input type="number" name="og-spacing" id="og-spacing" min="20" max="800" step="10" value="100" width="6">
+      </label>
+    </footer>
+    <dialog id="og-toc-modal">
+      <form method="dialog">
+        <nav id="og-toc-nav">Loading...</nav>
+      </form>
+    </dialog>
+    <!-- TODO: tooltip -->
+    <dialog id="og-preview-modal">
+      <div id="og-preview-div"></div>
+    </dialog>
+    <dialog id="og-details-modal">
+      <table id="og-book-details"></table>
+    </dialog>
+  </div>
+</body>
+
 </html>

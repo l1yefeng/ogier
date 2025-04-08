@@ -1,8 +1,11 @@
+:root {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
 #og-body {
     margin: 0;
 }
 
-/* FIXME: the reader is too high */
 #og-frame {
     display: flex;
     height: 100vh;
@@ -16,4 +19,8 @@
 
 #og-toc-nav ol {
     list-style: none;
+}
+
+#og-footer {
+    font-size: 0.8rem;
 }

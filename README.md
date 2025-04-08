@@ -4,10 +4,7 @@ Small and fast.
 
 ## TODO
 
-- [ ] CSS absolute length other than px
 - [ ] Store last read location: which line
-- [ ] Reader style: line height
-- [ ] Reader style: margin
 - [ ] Fetch font from archive
 - [ ] Anchors in pages
 - [ ] Read progress: which nav item?
