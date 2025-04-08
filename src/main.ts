@@ -75,17 +75,25 @@ function loadImageElement(
 function stagedCustomStyles(): CustomStyles {
 	return {
 		baseFontSize: elemFontSizeInput?.valueAsNumber,
-		lineHeight: elemSpacingInput?.valueAsNumber,
+		spacingScale: elemSpacingInput?.valueAsNumber,
 	};
 }
 
 function commitCustomStyles(stylesheet: CSSStyleSheet): void {
-	const { baseFontSize } = stagedCustomStyles();
-	let hostStyle = "";
-	if (baseFontSize) {
-		hostStyle += `font-size: ${baseFontSize}px;`;
-	}
-	stylesheet.replaceSync(`:host { ${hostStyle} }`);
+	const staged = stagedCustomStyles();
+	const baseFontSize = staged.baseFontSize ?? 16;
+	const spacingScale = (staged.spacingScale ?? 100) / 100;
+
+	elemReaderHost!.style.paddingInline = `${16 * Math.pow(spacingScale, 2)}px`;
+	const hostStyle = `
+		:host {
+			--og-space-scale: ${spacingScale};
+			--og-font-size: ${baseFontSize}px;
+			font-size: var(--og-font-size);
+			line-height: ${spacingScale * 1.25};
+		}
+	`;
+	stylesheet.replaceSync(hostStyle);
 }
 
 async function renderBookPage(spineItem: SpineItemData, scroll: number | null): Promise<void> {
@@ -170,12 +178,17 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 		if (customStyles.baseFontSize) {
 			elemFontSizeInput!.value = customStyles.baseFontSize.toString();
 		}
+		if (customStyles.spacingScale) {
+			elemSpacingInput!.value = customStyles.spacingScale.toString();
+		}
 	}
 	commitCustomStyles(stylesheetCustom);
-	elemFontSizeInput!.onchange = () => {
+	const handleCustomStyleInputChange = () => {
 		commitCustomStyles(stylesheetCustom);
 		rs.setCustomStyles(stagedCustomStyles());
 	};
+	elemFontSizeInput!.onchange = handleCustomStyleInputChange;
+	elemSpacingInput!.onchange = handleCustomStyleInputChange;
 
 	readerShadowRoot!.adoptedStyleSheets = stylesheets;
 	readerShadowRoot!.replaceChildren();

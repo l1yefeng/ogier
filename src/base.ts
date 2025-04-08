@@ -7,7 +7,7 @@ export interface SpineItemData {
 
 export interface CustomStyles {
 	baseFontSize?: number;
-	lineHeight?: number;
+	spacingScale?: number;
 }
 
 export interface EpubNavPoint {
