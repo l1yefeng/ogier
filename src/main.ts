@@ -1,13 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
-
 import {
 	anchoredSamePageLocation,
 	APP_NAME,
+	CustomStyles,
 	EpubMetadata,
 	EpubNavPoint,
 	isLocationNear,
 	repairEpubHref,
+	SpineItemData,
 } from "./base";
+import * as rs from "./invoke";
 
 // Elements. Initialized in DOMContentLoaded listener.
 //
@@ -22,6 +23,9 @@ let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
 let elemDetailsModal: HTMLDialogElement | null;
 let elemBookDetailsTable: HTMLTableElement | null;
+let elemSpinePosition: HTMLElement | null;
+let elemFontSizeInput: HTMLInputElement | null;
+let elemSpacingInput: HTMLInputElement | null;
 
 // Other global variables. Lazily initialized.
 //
@@ -40,6 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
 	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
 	elemBookDetailsTable = document.getElementById("og-book-details") as HTMLTableElement;
+	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
+	elemFontSizeInput = document.getElementById("og-font-size") as HTMLInputElement;
+	elemSpacingInput = document.getElementById("og-spacing") as HTMLInputElement;
 
 	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
@@ -51,10 +58,10 @@ function loadImageElement(
 	useDataBase64: (base64: string) => void,
 ): void {
 	elem.style.visibility = "hidden";
-	invoke("get_resource", { path })
+	rs.getResource(path)
 		.then(base64 => {
 			if (base64) {
-				useDataBase64(base64 as string);
+				useDataBase64(base64);
 				elem.style.visibility = "";
 			} else {
 				console.error(`Resource not found: ${path}`);
@@ -65,23 +72,39 @@ function loadImageElement(
 		});
 }
 
-async function renderBookPage(content: string): Promise<void> {
+function stagedCustomStyles(): CustomStyles {
+	return {
+		baseFontSize: elemFontSizeInput?.valueAsNumber,
+		lineHeight: elemSpacingInput?.valueAsNumber,
+	};
+}
+
+function commitCustomStyles(stylesheet: CSSStyleSheet): void {
+	const { baseFontSize } = stagedCustomStyles();
+	let hostStyle = "";
+	if (baseFontSize) {
+		hostStyle += `font-size: ${baseFontSize}px;`;
+	}
+	stylesheet.replaceSync(`:host { ${hostStyle} }`);
+}
+
+async function renderBookPage(spineItem: SpineItemData, scroll: number | null): Promise<void> {
 	const parser = new DOMParser();
-	const epubPageDoc = parser.parseFromString(content, "application/xhtml+xml");
+	const epubPageDoc = parser.parseFromString(spineItem.text, "application/xhtml+xml");
 
 	// load all images: <img> and svg <image>
 	for (const elem of epubPageDoc.body.querySelectorAll<HTMLImageElement>(
 		'img[src^="epub://"]',
 	)) {
 		loadImageElement(elem, elem.src.substring(7), base64 => {
-			elem.src = `data:${base64 as string}`;
+			elem.src = `data:${base64}`;
 		});
 	}
 	for (const elem of epubPageDoc.body.querySelectorAll<SVGImageElement>("image")) {
 		const href = elem.href.baseVal;
 		if (href.startsWith("epub://")) {
 			loadImageElement(elem, href.substring(7), base64 => {
-				elem.href.baseVal = `data:${base64 as string}`;
+				elem.href.baseVal = `data:${base64}`;
 			});
 		}
 	}
@@ -105,7 +128,7 @@ async function renderBookPage(content: string): Promise<void> {
 		const path = elemLink.href.substring(7);
 		let css: string;
 		try {
-			css = await invoke("get_resource", { path });
+			css = await rs.getResource(path);
 			console.debug(`loaded stylesheet ${path}: `, css);
 		} catch (err) {
 			console.error(`Error loading stylesheet ${path}:`, err);
@@ -119,7 +142,10 @@ async function renderBookPage(content: string): Promise<void> {
 		stylesheet.replace(css);
 		stylesheets.push(stylesheet);
 	}
-	let styleElemCss = `
+
+	const stylesheetInPage = new CSSStyleSheet();
+	stylesheets.push(stylesheetInPage);
+	let cssInPage = `
 		img {
 			max-width: 100%;
 		}
@@ -127,22 +153,39 @@ async function renderBookPage(content: string): Promise<void> {
 	for (const elemStyle of epubPageDoc.head.querySelectorAll<HTMLStyleElement>("style")) {
 		const css = elemStyle.textContent;
 		if (css) {
-			styleElemCss += css;
+			cssInPage += css;
 		}
 	}
+	stylesheetInPage.replace(cssInPage);
+
+	const stylesheetCustom = new CSSStyleSheet();
+	stylesheets.push(stylesheetCustom);
+	let customStyles: CustomStyles | null = null;
 	try {
-		styleElemCss += await invoke("get_custom_stylesheet");
+		customStyles = await rs.getCustomStyles();
 	} catch (err) {
-		console.error("Error loading custom CSS:", err);
+		console.error("Error loading saved custom styles:", err);
 	}
-	const stylesheet = new CSSStyleSheet();
-	stylesheet.replace(styleElemCss);
-	stylesheets.push(stylesheet);
+	if (customStyles) {
+		if (customStyles.baseFontSize) {
+			elemFontSizeInput!.value = customStyles.baseFontSize.toString();
+		}
+	}
+	commitCustomStyles(stylesheetCustom);
+	elemFontSizeInput!.onchange = () => {
+		commitCustomStyles(stylesheetCustom);
+		rs.setCustomStyles(stagedCustomStyles());
+	};
 
 	readerShadowRoot!.adoptedStyleSheets = stylesheets;
 	readerShadowRoot!.replaceChildren();
 	// insert the body
 	readerShadowRoot!.appendChild(epubPageDoc.body);
+	if (scroll != null) {
+		elemReaderHost!.scroll({ top: scroll, behavior: "instant" });
+	}
+
+	elemSpinePosition!.textContent = `Position: ${spineItem.position}`;
 }
 
 function createNavUi(navRoot: EpubNavPoint): void {
@@ -155,18 +198,18 @@ function createNavUi(navRoot: EpubNavPoint): void {
 		const value = elemTocModal!.returnValue;
 		if (value) {
 			const [path, locationId] = value.split("#", 2);
-			let content: string;
+			let spineItemData: SpineItemData | null;
 			try {
-				content = await invoke("navigate_to", { path });
+				spineItemData = await rs.moveToInSpine(path);
 			} catch (err) {
 				console.error(`Error jumping to ${path}:`, err);
 				return;
 			}
-			if (!content) {
+			if (!spineItemData) {
 				console.error(`Page not found: ${path}`);
 				return;
 			}
-			await renderBookPage(content);
+			await renderBookPage(spineItemData, 0);
 			if (locationId) {
 				readerShadowRoot!.getElementById(locationId)?.scrollIntoView();
 			}
@@ -192,12 +235,12 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 }
 
 function handleClickToOpen(event: PointerEvent): void {
-	invoke("open_epub")
-		.then(result => {
-			if (result) {
+	rs.openEpub()
+		.then(initSpineItem => {
+			if (initSpineItem) {
 				// got the book.
 				(event.target as HTMLElement).remove();
-				openEpub(result as string);
+				openEpub(initSpineItem);
 			}
 		})
 		.catch(err => {
@@ -317,7 +360,7 @@ function createBookDetailsUi(metadata: EpubMetadata): void {
 async function initMetadata(): Promise<void> {
 	let result: EpubMetadata;
 	try {
-		result = await invoke("get_metadata");
+		result = await rs.getMetadata();
 	} catch (err) {
 		console.error("Error loading metadata:", err);
 		return;
@@ -330,7 +373,7 @@ async function initMetadata(): Promise<void> {
 async function initToc(): Promise<void> {
 	let result: EpubNavPoint;
 	try {
-		result = await invoke("get_toc");
+		result = await rs.getToc();
 	} catch (err) {
 		console.error("Error loading TOC:", err);
 		return;
@@ -338,7 +381,7 @@ async function initToc(): Promise<void> {
 	createNavUi(result);
 }
 
-async function openEpub(pageContent: string): Promise<void> {
+async function openEpub(spineItem: SpineItemData): Promise<void> {
 	initToc();
 	initMetadata();
 
@@ -357,16 +400,16 @@ async function openEpub(pageContent: string): Promise<void> {
 		elemDetailsModal!.showModal();
 	});
 
-	renderBookPage(pageContent);
+	renderBookPage(spineItem, 0);
 }
 
-function goToChapter(command: string, onEmptyResult: () => void): void {
-	invoke(command)
+function moveInSpine(next: boolean): void {
+	rs.moveInSpine(next)
 		.then(result => {
 			if (result) {
-				renderBookPage(result as string);
+				renderBookPage(result, next ? 0 : 1e6);
 			} else {
-				onEmptyResult();
+				window.alert("No more pages.");
 			}
 		})
 		.catch(err => {
@@ -374,24 +417,12 @@ function goToChapter(command: string, onEmptyResult: () => void): void {
 		});
 }
 
-function goToNextChapter(): void {
-	goToChapter("navigate_next", () => {
-		window.alert("This is the last chapter.");
-	});
-}
-
-function goToPrevChapter(): void {
-	goToChapter("navigate_prev", () => {
-		window.alert("This is the first chapter.");
-	});
-}
-
 function handleKeyEvent(event: KeyboardEvent): void {
 	if (event.key === "ArrowRight") {
 		event.preventDefault();
-		goToNextChapter();
+		moveInSpine(true);
 	} else if (event.key === "ArrowLeft") {
 		event.preventDefault();
-		goToPrevChapter();
+		moveInSpine(false);
 	}
 }

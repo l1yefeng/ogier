@@ -4,24 +4,16 @@ Small and fast.
 
 ## TODO
 
-- [ ] BUG: Page location should be 0 when next page, not the same
+- [ ] CODE: https://jonaskruckenberg.github.io/tauri-docs-wip/development/inter-process-communication.html#error-handling
 - [ ] CSS absolute length other than px
-- [x] Fix menu item
-- [x] Store last read location: which page
 - [ ] Store last read location: which line
 - [ ] Reader style: line height
 - [ ] Reader style: margin
-- [x] Reader style: font
-- [ ] Reader style: line height, margin, and font
-- [ ] UI style
-- [x] Show footnote in place
-- [x] Show book details
-- [x] Show toc
 - [ ] Fetch font from archive
 - [ ] Show cover
 - [ ] Anchors in pages
-- [x] Anchors from toc
 - [ ] Drap and drop file to open
+- [ ] Read progress: which nav item?
 
 ## App persistent state
 

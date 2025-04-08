@@ -1,5 +1,15 @@
 export const APP_NAME = "Ogier EPUB Reader";
 
+export interface SpineItemData {
+	position: number;
+	text: string;
+}
+
+export interface CustomStyles {
+	baseFontSize?: number;
+	lineHeight?: number;
+}
+
 export interface EpubNavPoint {
 	label: string;
 	content: string;

@@ -77,13 +77,23 @@ impl Serialize for MyNavPoint {
     }
 }
 
+#[derive(Serialize)]
+struct SpineItemData {
+    position: usize,
+    text: String,
+}
+
 const PROGRESS_STORE: &str = "progress.json";
 
-fn book_get_current(state: &tauri::State<AppState>) -> CmdResult<Vec<u8>> {
+fn book_get_current(state: &tauri::State<AppState>) -> CmdResult<SpineItemData> {
     let mut state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
     let book = state.book.as_mut().unwrap();
-    book.get_current_with_epub_uris()
-        .map_err(|_| CmdErr::InvalidEpub)
+    let text = book
+        .get_current_with_epub_uris()
+        .map_err(|_| CmdErr::InvalidEpub)?;
+    let text = String::from_utf8(text).map_err(|_| CmdErr::InvalidEpub)?;
+    let position = book.get_current_page();
+    Ok(SpineItemData { position, text })
 }
 
 fn book_navigate(state: &tauri::State<AppState>, command: NavigateOp) -> CmdResult<bool> {
@@ -188,22 +198,27 @@ fn navigate(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
     command: NavigateOp,
-) -> CmdResult<String> {
+) -> CmdResult<Option<SpineItemData>> {
     if !book_navigate(&state, command)? {
-        return Ok(String::new());
+        return Ok(None);
     }
     book_save_progress(app, &state)?;
-    let content = book_get_current(&state)?;
-    String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)
+    book_get_current(&state).map(Some)
 }
 
 #[tauri::command]
-fn navigate_next(app: tauri::AppHandle, state: tauri::State<AppState>) -> CmdResult<String> {
+fn navigate_next(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> CmdResult<Option<SpineItemData>> {
     navigate(app, state, NavigateOp::Next)
 }
 
 #[tauri::command]
-fn navigate_prev(app: tauri::AppHandle, state: tauri::State<AppState>) -> CmdResult<String> {
+fn navigate_prev(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> CmdResult<Option<SpineItemData>> {
     navigate(app, state, NavigateOp::Prev)
 }
 
@@ -212,7 +227,7 @@ fn navigate_to(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
     path: String,
-) -> CmdResult<String> {
+) -> CmdResult<Option<SpineItemData>> {
     navigate(app, state, NavigateOp::JumpTo(path))
 }
 
@@ -231,7 +246,7 @@ fn custom_stylesheet_path(
         let state = state.lock().map_err(|_| CmdErr::NotSureWhat)?;
         resolve_store_path(&app, state.book_hash).map_err(|_| CmdErr::NotSureWhat)?
     };
-    css_path.set_extension("css");
+    css_path.set_extension("json");
     Ok(css_path)
 }
 
@@ -249,7 +264,17 @@ fn get_custom_stylesheet(
     state: tauri::State<AppState>,
 ) -> CmdResult<String> {
     let css_path = custom_stylesheet_path(&app, &state)?;
-    Ok(std::fs::read_to_string(css_path).map_or_else(|_| String::new(), |css| css))
+    Ok(std::fs::read_to_string(css_path).unwrap_or_default())
+}
+
+#[tauri::command]
+fn set_custom_stylesheet(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    content: String,
+) -> CmdResult<()> {
+    let css_path = custom_stylesheet_path(&app, &state)?;
+    std::fs::write(css_path, content).map_err(|_| CmdErr::FileNotOpened)
 }
 
 #[tauri::command]
@@ -257,17 +282,17 @@ fn open_epub(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
     window: tauri::Window,
-) -> CmdResult<String> {
+) -> CmdResult<Option<SpineItemData>> {
     let Some(file_path) = app
         .dialog()
         .file()
         .add_filter("EPUB", &["epub"])
         .blocking_pick_file()
     else {
-        return Ok(String::new()); // file picking was cancelled
+        return Ok(None); // file picking was cancelled
     };
     let FilePath::Path(filepath) = file_path else {
-        return Ok(String::new()); // TODO unimplemented
+        return Ok(None); // TODO unimplemented
     };
     // open file
     let book = EpubDoc::new(&filepath).map_err(|err| match err {
@@ -310,9 +335,7 @@ fn open_epub(
     }
 
     book_save_progress(app, &state)?;
-    let content = book_get_current(&state)?;
-
-    String::from_utf8(content).map_err(|_| CmdErr::InvalidEpub)
+    book_get_current(&state).map(Some)
 }
 
 fn setup_menu(app: &mut tauri::App) -> Result<(), Box<(dyn std::error::Error + 'static)>> {
@@ -375,6 +398,7 @@ pub fn run() {
             navigate_to,
             open_custom_stylesheet,
             open_epub,
+            set_custom_stylesheet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
