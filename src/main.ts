@@ -431,10 +431,14 @@ function moveInSpine(next: boolean): void {
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {
-	if (event.key === "ArrowRight") {
+	if (event.target == elemFontSizeInput || event.target == elemSpacingInput) {
+		return;
+	}
+
+	if (event.key == "ArrowRight" || (event.ctrlKey && event.key == "PageDown")) {
 		event.preventDefault();
 		moveInSpine(true);
-	} else if (event.key === "ArrowLeft") {
+	} else if (event.key == "ArrowLeft" || (event.ctrlKey && event.key == "PageUp")) {
 		event.preventDefault();
 		moveInSpine(false);
 	}
