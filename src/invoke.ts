@@ -35,10 +35,10 @@ export function openEpub(): Promise<SpineItemData | null> {
 	return invoke("open_epub");
 }
 
-// TODO: Rename the API and merge into one.
+// TODO: Rename the API
 export function moveInSpine(next: boolean): Promise<SpineItemData | null> {
-	const command = next ? "navigate_next" : "navigate_prev";
-	return invoke(command);
+	const args = { next };
+	return invoke("navigate_adjacent", args);
 }
 
 export function moveToInSpine(path: string): Promise<SpineItemData | null> {

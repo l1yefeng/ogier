@@ -4,16 +4,15 @@ Small and fast.
 
 ## TODO
 
-- [ ] CODE: https://jonaskruckenberg.github.io/tauri-docs-wip/development/inter-process-communication.html#error-handling
 - [ ] CSS absolute length other than px
 - [ ] Store last read location: which line
 - [ ] Reader style: line height
 - [ ] Reader style: margin
 - [ ] Fetch font from archive
-- [ ] Show cover
 - [ ] Anchors in pages
-- [ ] Drap and drop file to open
 - [ ] Read progress: which nav item?
+- [ ] Show cover
+- [ ] Drap and drop file to open
 
 ## App persistent state
 
