@@ -1,7 +1,11 @@
 export const APP_NAME = "Ogier EPUB Reader";
 
 export interface SpineItemData {
+	// Start from 0, indexing the spine
 	position: number;
+	// Path relative to the archive root. No leading "/" or "epub://", or tailing "/"
+	path: string;
+	// File content
 	text: string;
 }
 
@@ -47,13 +51,22 @@ export function isLocationNear(locationId: string, elem: Element): boolean {
 	return false;
 }
 
-export function repairEpubHref(anchor: HTMLAnchorElement): void {
+/**
+ * @requires href value starts with epub://. This is ensured by rs.
+ */
+export function repairEpubHref(anchor: HTMLAnchorElement, currentPath: string): void {
 	const value = anchor.getAttribute("href");
-	if (value) {
-		const hashIndex = value.lastIndexOf("#");
-		if (hashIndex >= 0 && value[hashIndex - 1] == "/") {
-			anchor.href = value.substring(hashIndex);
-		}
+	if (!value) {
+		return;
+	}
+	const hashIndex = value.lastIndexOf("#");
+	if (hashIndex <= 0) {
+		return;
+	}
+	if (value[hashIndex - 1] == "/") {
+		anchor.href = value.substring(hashIndex);
+	} else if (value.substring(7, hashIndex) == currentPath) {
+		anchor.href = value.substring(hashIndex);
 	}
 }
 

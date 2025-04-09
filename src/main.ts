@@ -26,6 +26,7 @@ let elemBookDetailsTable: HTMLTableElement | null;
 let elemSpinePosition: HTMLElement | null;
 let elemFontSizeInput: HTMLInputElement | null;
 let elemSpacingInput: HTMLInputElement | null;
+let elemTocBtnLabel: HTMLElement | null;
 
 // Other global variables. Lazily initialized.
 //
@@ -47,6 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
 	elemFontSizeInput = document.getElementById("og-font-size") as HTMLInputElement;
 	elemSpacingInput = document.getElementById("og-spacing") as HTMLInputElement;
+	elemTocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
 
 	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
@@ -82,9 +84,10 @@ function stagedCustomStyles(): CustomStyles {
 function commitCustomStyles(stylesheet: CSSStyleSheet): void {
 	const staged = stagedCustomStyles();
 	const baseFontSize = staged.baseFontSize ?? 16;
-	const spacingScale = (staged.spacingScale ?? 100) / 100;
+	const spacingScale = (staged.spacingScale ?? 10) / 10;
 
-	elemReaderHost!.style.paddingInline = `${16 * Math.pow(spacingScale, 2)}px`;
+	const padding = 16 * Math.pow(spacingScale, 1.5);
+	elemReaderHost!.style.paddingInline = `${padding.toFixed(2)}px`;
 	const hostStyle = `
 		:host {
 			--og-space-scale: ${spacingScale};
@@ -98,17 +101,16 @@ function commitCustomStyles(stylesheet: CSSStyleSheet): void {
 
 async function renderBookPage(spineItem: SpineItemData, scroll: number | null): Promise<void> {
 	const parser = new DOMParser();
-	const epubPageDoc = parser.parseFromString(spineItem.text, "application/xhtml+xml");
+	const pageDoc = parser.parseFromString(spineItem.text, "application/xhtml+xml");
+	const pageBody = pageDoc.body;
 
 	// load all images: <img> and svg <image>
-	for (const elem of epubPageDoc.body.querySelectorAll<HTMLImageElement>(
-		'img[src^="epub://"]',
-	)) {
+	for (const elem of pageBody.querySelectorAll<HTMLImageElement>('img[src^="epub://"]')) {
 		loadImageElement(elem, elem.src.substring(7), base64 => {
 			elem.src = `data:${base64}`;
 		});
 	}
-	for (const elem of epubPageDoc.body.querySelectorAll<SVGImageElement>("image")) {
+	for (const elem of pageBody.querySelectorAll<SVGImageElement>("image")) {
 		const href = elem.href.baseVal;
 		if (href.startsWith("epub://")) {
 			loadImageElement(elem, href.substring(7), base64 => {
@@ -119,10 +121,8 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 
 	// repair anchor element hrefs
 	new Promise(() => {
-		for (const elem of epubPageDoc.body.querySelectorAll<HTMLAnchorElement>(
-			'a[href^="epub://"]',
-		)) {
-			repairEpubHref(elem);
+		for (const elem of pageBody.querySelectorAll<HTMLAnchorElement>('a[href^="epub://"]')) {
+			repairEpubHref(elem, spineItem.path);
 		}
 	});
 
@@ -130,7 +130,7 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 	// TODO (optimize) don't need to re-fetch the same <link>
 	const stylesheets: CSSStyleSheet[] = [];
 	// TODO (optimize) parallellize
-	for (const elemLink of epubPageDoc.head.querySelectorAll<HTMLLinkElement>(
+	for (const elemLink of pageDoc.head.querySelectorAll<HTMLLinkElement>(
 		'link[rel="stylesheet"]',
 	)) {
 		const path = elemLink.href.substring(7);
@@ -158,7 +158,7 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 			max-width: 100%;
 		}
     `;
-	for (const elemStyle of epubPageDoc.head.querySelectorAll<HTMLStyleElement>("style")) {
+	for (const elemStyle of pageDoc.head.querySelectorAll<HTMLStyleElement>("style")) {
 		const css = elemStyle.textContent;
 		if (css) {
 			cssInPage += css;
@@ -193,12 +193,21 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 	readerShadowRoot!.adoptedStyleSheets = stylesheets;
 	readerShadowRoot!.replaceChildren();
 	// insert the body
-	readerShadowRoot!.appendChild(epubPageDoc.body);
+	readerShadowRoot!.appendChild(pageBody);
 	if (scroll != null) {
 		elemReaderHost!.scroll({ top: scroll, behavior: "instant" });
 	}
 
 	elemSpinePosition!.textContent = `Position: ${spineItem.position}`;
+
+	const btn = mostRecentNavPoint(spineItem.path, 0);
+	if (btn) {
+		elemTocBtnLabel!.lang = elemTocNav!.lang;
+		elemTocBtnLabel!.textContent = btn.textContent;
+	} else {
+		elemTocBtnLabel!.removeAttribute("lang");
+		elemTocBtnLabel!.textContent = "Table of contents";
+	}
 }
 
 function createNavUi(navRoot: EpubNavPoint): void {
@@ -210,24 +219,16 @@ function createNavUi(navRoot: EpubNavPoint): void {
 	elemTocModal!.addEventListener("close", async () => {
 		const value = elemTocModal!.returnValue;
 		if (value) {
+			// If there is no hash, locationId is undefined.
 			const [path, locationId] = value.split("#", 2);
-			let spineItemData: SpineItemData | null;
-			try {
-				spineItemData = await rs.moveToInSpine(path);
-			} catch (err) {
-				console.error(`Error jumping to ${path}:`, err);
-				return;
-			}
-			if (!spineItemData) {
-				console.error(`Page not found: ${path}`);
-				return;
-			}
-			await renderBookPage(spineItemData, 0);
-			if (locationId) {
-				readerShadowRoot!.getElementById(locationId)?.scrollIntoView();
-			}
+			await navigateTo(path, locationId);
 		}
 	});
+}
+
+// TODO: be more precise
+function mostRecentNavPoint(currentPath: string, _offset: number): HTMLButtonElement | null {
+	return elemTocNav!.querySelector<HTMLButtonElement>(`button[data-path="${currentPath}"]`);
 }
 
 function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
@@ -236,6 +237,9 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	const elemNavBtn = document.createElement("button");
 	elemNavBtn.textContent = navPoint.label;
 	elemNavBtn.value = navPoint.content;
+	const [path, locationId] = navPoint.content.split("#", 2);
+	elemNavBtn.dataset.path = path;
+	elemNavBtn.dataset.locationId = locationId || "";
 	elemNavPoint.appendChild(elemNavBtn);
 
 	if (navPoint.children.length > 0) {
@@ -261,34 +265,54 @@ function handleClickToOpen(event: PointerEvent): void {
 		});
 }
 
+function createPreviewContentRoot(elemLocation: HTMLElement): HTMLElement {
+	// First, try to locate a <li>, and use its content
+	let elemLi: HTMLLIElement | null = null;
+	if (elemLocation instanceof HTMLLIElement) {
+		elemLi = elemLocation;
+	} else if (elemLocation.parentElement instanceof HTMLLIElement) {
+		elemLi = elemLocation.parentElement;
+	}
+	if (elemLi) {
+		// clone the element
+		return elemLi.cloneNode(true) as HTMLLIElement;
+	}
+
+	// Next, use its parent if it's a <a>
+	if (elemLocation instanceof HTMLAnchorElement) {
+		const parent = elemLocation.parentElement;
+		if (parent) {
+			return parent.cloneNode(true) as HTMLElement;
+		}
+	}
+
+	return elemLocation.cloneNode(true) as HTMLElement;
+}
+
 function createSamePageLocationPreview(anchor: HTMLElement, id: string): boolean {
 	const elemLocation = readerShadowRoot!.getElementById(id);
-	if (elemLocation) {
-		let elemLi: HTMLLIElement | null = null;
-		if (elemLocation instanceof HTMLLIElement) {
-			elemLi = elemLocation;
-		} else if (elemLocation.parentElement instanceof HTMLLIElement) {
-			elemLi = elemLocation.parentElement;
-		}
-		if (elemLi) {
-			// clone the element
-			elemLi = elemLi.cloneNode(true) as HTMLLIElement;
-			for (const elem of elemLi.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
-				const id = anchoredSamePageLocation(elem)!;
-				if (isLocationNear(id, anchor)) {
-					elem.remove();
-					break;
-				}
-			}
-			elemPreviewDiv!.replaceChildren(...elemLi.childNodes);
-			return true;
-		} else {
-			// TODO
-			return false;
-		}
-	} else {
+	if (!elemLocation) {
 		return false;
 	}
+
+	const previewContentRoot = createPreviewContentRoot(elemLocation);
+	for (const elem of previewContentRoot.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+		const idPointedByElem = anchoredSamePageLocation(elem)!;
+		if (isLocationNear(idPointedByElem, anchor)) {
+			const subs = document.createElement("span");
+			subs.classList.add("og-note-icon");
+			elem.replaceWith(subs);
+		} else {
+			elem.href = "";
+		}
+	}
+
+	if (!previewContentRoot.textContent?.trim()) {
+		return false;
+	}
+
+	elemPreviewDiv!.replaceChildren(...previewContentRoot.childNodes);
+	return true;
 }
 
 function previewSamePageLocation(anchor: HTMLElement, id: string): void {
@@ -297,6 +321,24 @@ function previewSamePageLocation(anchor: HTMLElement, id: string): void {
 		if (createSamePageLocationPreview(anchor, id)) {
 			elemPreviewModal!.showModal();
 		}
+	}
+}
+
+async function navigateTo(path: string, locationId?: string): Promise<void> {
+	let spineItemData: SpineItemData | null;
+	try {
+		spineItemData = await rs.moveToInSpine(path);
+	} catch (err) {
+		console.error(`Error jumping to ${path}:`, err);
+		return;
+	}
+	if (!spineItemData) {
+		console.error(`Page not found: ${path}`);
+		return;
+	}
+	await renderBookPage(spineItemData, 0);
+	if (locationId) {
+		readerShadowRoot!.getElementById(locationId)?.scrollIntoView();
 	}
 }
 
@@ -315,8 +357,8 @@ function handleClickInReader(event: PointerEvent): void {
 		if (samePageId) {
 			previewSamePageLocation(elemAnchor, samePageId);
 		} else if (elemAnchor.href.startsWith("epub://")) {
-			// TODO
-			console.warn("Unimplemented: preview location");
+			const [path, locationId] = elemAnchor.href.substring(7).split("#", 2);
+			navigateTo(path, locationId);
 		}
 	}
 }

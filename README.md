@@ -4,9 +4,9 @@ Small and fast.
 
 ## TODO
 
+- [ ] External links
 - [ ] Store last read location: which line
 - [ ] Fetch font from archive
-- [ ] Anchors in pages
 - [ ] Read progress: which nav item?
 - [ ] Show cover
 - [ ] Drap and drop file to open

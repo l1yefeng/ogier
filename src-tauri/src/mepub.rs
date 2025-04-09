@@ -13,7 +13,10 @@ impl Serialize for MyNavPoint {
     {
         let mut state = serializer.serialize_struct("NavPoint", 4)?;
         state.serialize_field("label", &self.0.label)?;
-        state.serialize_field("content", &self.0.content.to_string_lossy())?;
+        state.serialize_field(
+            "content",
+            &self.0.content.to_string_lossy().replace('\\', "/"),
+        )?;
         state.serialize_field("playOrder", &self.0.play_order)?;
         state.serialize_field(
             "children",

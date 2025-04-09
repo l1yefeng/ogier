@@ -1,5 +1,9 @@
 :root {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --color-active-control-background: #e5f3ff;
+    --color-active-control-outline: #74bcfc;
+
+    font-family: var(--font);
 }
 
 #og-body {
@@ -17,10 +21,73 @@
     overflow-y: auto;
 }
 
-#og-toc-nav ol {
-    list-style: none;
-}
+/* Footer */
 
 #og-footer {
     font-size: 0.8rem;
+
+    .og-starting-icon {
+        display: inline-flex;
+        flex-direction: row;
+        align-items: center;
+    }
+
+    label.og-starting-icon {
+        border: 1px solid gray;
+        border-style: inset;
+        padding-inline-start: 0.5ch;
+
+        input {
+            width: 5ch;
+
+            border: none;
+            &:focus {
+                outline: none;
+            }
+        }
+    }
+
+    button, input {
+        font-family: var(--font);
+    }
+}
+
+/* TOC modal */
+
+#og-toc-nav {
+    ol {
+        /* Remove the numbers */
+        list-style: none;
+
+        &:first-child {
+            /* Remove the indentation of the root <ol> */
+            padding-inline-start: 0;
+        }
+    }
+
+    button {
+        /* Whole width clickable */
+        width: 100%;
+
+        border: none;
+        background: none;
+
+        text-align: left;
+
+        &:hover {
+            background-color: var(--color-active-control-background);
+        }
+    }
+
+    li:hover {
+        outline: 1px solid var(--color-active-control-outline);
+    }
+}
+
+/* Preview modal */
+
+#og-preview-div {
+    .og-note-icon::before {
+        content: url(/src/assets/fluent/notebook_arrow_curve_down_20_regular.svg);
+    }
 }
