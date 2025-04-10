@@ -1,0 +1,127 @@
+import { EpubMetadata, EpubNavPoint } from "./base";
+
+let elemDetailsModal: HTMLDialogElement | null;
+let elemBookDetailsTable: HTMLTableElement | null;
+let elemTocModal: HTMLDialogElement | null;
+let elemTocNav: HTMLElement | null;
+let elemPreviewModal: HTMLDialogElement | null;
+let elemPreviewDiv: HTMLDivElement | null;
+
+export function loadModalsContent(): void {
+	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
+	elemBookDetailsTable = document.getElementById("og-book-details") as HTMLTableElement;
+	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
+	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
+	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
+	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
+}
+
+export function setModalsLanguage(lang: string): void {
+	elemTocNav!.lang = lang;
+	elemPreviewDiv!.lang = lang;
+}
+
+export function getModalsLanguage(): string {
+	return elemTocNav!.lang;
+}
+
+// Details: metadata and book/file properties
+//
+
+export function createBookDetailsUi(metadata: EpubMetadata): void {
+	elemBookDetailsTable!.replaceChildren(
+		...Object.entries(metadata).map(([key, values]) => {
+			const tr = document.createElement("tr");
+			const th = document.createElement("th");
+			const td = document.createElement("td");
+			tr.append(th, td);
+
+			th.textContent = key;
+
+			if (values) {
+				if (values.length > 1) {
+					// use a list
+					const ul = document.createElement("ul");
+					td.appendChild(ul);
+					ul.append(
+						...values.map(v => {
+							const li = document.createElement("li");
+							li.textContent = v;
+							return li;
+						}),
+					);
+				} else {
+					td.textContent = values[0];
+				}
+			}
+
+			return tr;
+		}),
+	);
+}
+
+export function showDetails(): void {
+	elemDetailsModal!.showModal();
+}
+
+// Toc
+//
+
+function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
+	const elemNavPoint = document.createElement("li");
+
+	const elemNavBtn = document.createElement("button");
+	elemNavBtn.textContent = navPoint.label;
+	elemNavBtn.value = navPoint.content;
+	const [path, locationId] = navPoint.content.split("#", 2);
+	elemNavBtn.dataset.path = path;
+	elemNavBtn.dataset.locationId = locationId || "";
+	elemNavPoint.appendChild(elemNavBtn);
+
+	if (navPoint.children.length > 0) {
+		const sub = document.createElement("ol");
+		sub.append(...navPoint.children.map(createNavPoint));
+		elemNavPoint.appendChild(sub);
+	}
+
+	return elemNavPoint;
+}
+
+export function createNavUi(
+	navRoot: EpubNavPoint,
+	navigateTo: (path: string, locationId?: string) => Promise<void>,
+): void {
+	const ol = document.createElement("ol");
+	elemTocNav!.replaceChildren(ol);
+
+	ol.append(...navRoot.children.map(createNavPoint));
+
+	elemTocModal!.addEventListener("close", async () => {
+		const value = elemTocModal!.returnValue;
+		if (value) {
+			// If there is no hash, locationId is undefined.
+			const [path, locationId] = value.split("#", 2);
+			await navigateTo(path, locationId);
+		}
+	});
+}
+
+// TODO: be more precise
+export function mostRecentNavPoint(
+	currentPath: string,
+	_offset: number,
+): HTMLButtonElement | null {
+	return elemTocNav!.querySelector<HTMLButtonElement>(`button[data-path="${currentPath}"]`);
+}
+
+export function showToc(): void {
+	elemTocModal!.showModal();
+}
+
+// Note preview
+//
+
+export function showNotePreview(floatingContentRoot: HTMLElement): void {
+	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
+	elemPreviewModal!.showModal();
+}

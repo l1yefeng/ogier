@@ -10,8 +10,10 @@ use std::sync::Mutex;
 
 use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, NavPoint};
-use tauri::Manager;
-use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{
+    AboutMetadataBuilder, Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+};
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{StoreExt, resolve_store_path};
@@ -101,7 +103,7 @@ fn compute_book_hash(filepath: &PathBuf) -> CmdResult<EpubHash> {
     }
 
     let hash = hasher.finish();
-    Ok(EpubHash::from(&format!("{:016x}", hash)).unwrap())
+    Ok(EpubHash::from(&format!("{hash:016x}")).unwrap())
 }
 
 #[tauri::command]
@@ -164,6 +166,11 @@ fn navigate_adjacent(
     }
     book_save_progress(app, &state)?;
     book_get_current(&state).map(Some)
+}
+
+#[tauri::command]
+fn reload_current(state: tauri::State<AppState>) -> CmdResult<SpineItem> {
+    book_get_current(&state)
 }
 
 #[tauri::command]
@@ -277,42 +284,51 @@ fn open_epub(
         }
     }
 
-    if let Some(menu) = window.menu() {
-        let reader_submenu = menu.get("reader").unwrap();
-        reader_submenu.as_submenu_unchecked().set_enabled(true)?;
-    }
+    complete_menu(&window)?;
 
     book_save_progress(app, &state)?;
     book_get_current(&state).map(Some)
 }
 
-fn setup_menu(app: &mut tauri::App) -> Result<(), Box<(dyn std::error::Error + 'static)>> {
-    let handle = app.handle();
-    let menu = Menu::new(handle)?;
-    let file_submenu = SubmenuBuilder::new(handle, "File")
-        .id("file")
-        .item(
-            &MenuItemBuilder::new("&Open EPUB")
-                .id("file::open-epub")
-                .build(handle)?,
-        )
+fn complete_menu(window: &tauri::Window) -> Result<(), tauri::Error> {
+    let menu = window.menu().unwrap();
+
+    // File
+    let file_submenu = menu.get("file").unwrap();
+    file_submenu.as_submenu_unchecked().insert_items(
+        &[
+            &PredefinedMenuItem::separator(window)?,
+            &MenuItemBuilder::new("&Details")
+                .id("file::details")
+                .build(window)?,
+            &MenuItemBuilder::new("&Table of Contents")
+                .id("file::table-of-contents")
+                .build(window)?,
+            &PredefinedMenuItem::separator(window)?,
+        ],
+        1,
+    )?;
+
+    // View
+    let view_submenu = SubmenuBuilder::new(window, "View")
+        .id("view")
+        .text("view::open-custom-stylesheet", "Open &Custom Stylesheet")
         .build()?;
-    let reader_submenu = SubmenuBuilder::new(handle, "Reader")
-        .id("reader")
-        .item(
-            &MenuItemBuilder::new("Open &Custom Stylesheet")
-                .id("reader::open-custom-stylesheet")
-                .build(handle)?,
-        )
-        .enabled(false)
-        .build()?;
-    menu.append_items(&[&file_submenu, &reader_submenu])?;
-    app.set_menu(menu)?;
+    menu.insert(&view_submenu, 1)?;
+
+    Ok(())
+}
+
+fn setup_menu_listener(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
     app.on_menu_event(move |handle, event| match event.id().0.as_str() {
-        "file::open-epub" => {
-            println!("Open EPUB: Unimplemented");
+        id @ ("file::details" | "file::table-of-contents") => {
+            // Show table of contents in front end
+            if let Err(err) = handle.emit_to("main", &format!("menu/{id}"), ()) {
+                eprintln!("ERR: Failed to send event {}: {}", id, err)
+            }
         }
-        "reader::open-custom-stylesheet" => {
+        "view::open-custom-stylesheet" => {
+            // Open preference file in system opener
             let state = handle.state();
             if let Ok(css_path) = custom_stylesheet_path(handle, &state) {
                 if let Err(err) = handle
@@ -323,8 +339,55 @@ fn setup_menu(app: &mut tauri::App) -> Result<(), Box<(dyn std::error::Error + '
                 }
             }
         }
+        "help::version" => {
+            // TODO: https://v2.tauri.app/plugin/clipboard/
+        }
+        "help::website--support" => {
+            // Open website in system opener
+            if let Err(err) = handle
+                .opener()
+                .open_url("https://lyfeng.xyz/ogier", None::<&str>)
+            {
+                eprintln!("ERR: Failed to open website: {}", err);
+            }
+        }
         _ => {}
     });
+    Ok(())
+}
+
+fn setup_menu(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
+    let menu = Menu::new(app)?;
+
+    let file_submenu = SubmenuBuilder::new(app, "File")
+        .id("file")
+        .text("file::open-epub", "&Open EPUB")
+        .quit()
+        .build()?;
+
+    let help_submenu = SubmenuBuilder::new(app, "Help")
+        .id("help")
+        .text("help::version", "App &Version: dev")
+        .item(
+            &MenuItemBuilder::new("&Website && Support")
+                .id("help::website--support")
+                .build(app)?,
+        )
+        .about_with_text(
+            "&License && Copyrights",
+            Some(
+                AboutMetadataBuilder::new()
+                    .comments(Some("Ogier: a fast and simple EPUB reader (freeware)"))
+                    .copyright(Some("Copyright 2025, Ogier EPUB Reader developers"))
+                    .build(),
+            ),
+        )
+        .build()?;
+
+    menu.append_items(&[&file_submenu, &help_submenu])?;
+
+    app.set_menu(menu)?;
+
     Ok(())
 }
 
@@ -335,7 +398,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppData::new()))
-        .setup(setup_menu)
+        .setup(|app| {
+            let handle = app.handle();
+            setup_menu(&handle)?;
+            setup_menu_listener(&handle)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_custom_stylesheet,
             get_metadata,
@@ -345,6 +413,7 @@ pub fn run() {
             navigate_to,
             open_custom_stylesheet,
             open_epub,
+            reload_current,
             set_custom_stylesheet,
         ])
         .run(tauri::generate_context!())

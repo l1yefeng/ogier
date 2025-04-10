@@ -10,6 +10,19 @@
     margin: 0;
 }
 
+/* Click to open / Welcome */
+
+#og-click-to-open {
+    display: flex;
+    height: 100vh;
+
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    cursor: pointer;
+    user-select: none;
+}
+
 #og-frame {
     display: flex;
     height: 100vh;
@@ -25,30 +38,69 @@
 
 #og-footer {
     font-size: 0.8rem;
+    cursor: default;
+    padding: 0.2rem 0.5ch;
+    display: flex;
+    user-select: none;
+
+
+    #og-spine-position {
+        margin-inline: auto;
+        align-self: center;
+    }
+
+    #og-toc-button-label {
+        margin-inline-start: 2px;
+    }
 
     .og-starting-icon {
-        display: inline-flex;
-        flex-direction: row;
-        align-items: center;
+        display: inline-block;
+
+        img {
+            vertical-align: text-bottom;
+            height: 1.25em;
+        }
     }
 
     label.og-starting-icon {
         border: 1px solid gray;
         border-style: inset;
-        padding-inline-start: 0.5ch;
+        padding-inline-start: 2px;
+
+        /* Add a space between adjacent <label>s */
+        & + label.og-starting-icon {
+            margin-inline-start: 2px;
+        }
+
+        &:has(input:focus) {
+            background-color: var(--color-active-control-background);
+            outline: 1px solid gray;
+        }
 
         input {
-            width: 5ch;
+            width: 6ch;
 
             border: none;
             &:focus {
                 outline: none;
+                background: inherit
             }
+        }
+    }
+
+    button {
+        border: none;
+        background: none;
+
+        &:hover {
+            background-color: var(--color-active-control-background);
+            outline: 1px solid var(--color-active-control-outline);
         }
     }
 
     button, input {
         font-family: var(--font);
+        font-size: inherit;
     }
 }
 

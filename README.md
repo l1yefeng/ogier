@@ -4,6 +4,8 @@ Small and fast.
 
 ## TODO
 
+- [ ] Improve performance when loading styles
+- [ ] When toc shows, current nav point is in the center and focused
 - [ ] External links
 - [ ] Store last read location: which line
 - [ ] Fetch font from archive

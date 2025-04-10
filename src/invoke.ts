@@ -27,7 +27,7 @@ export function getCustomStyles(): Promise<CustomStyles | null> {
 }
 
 export function setCustomStyles(styles: CustomStyles): Promise<void> {
-	const args = { content: JSON.stringify(styles) };
+	const args = { content: JSON.stringify(styles, undefined, 2) };
 	return invoke("set_custom_stylesheet", args);
 }
 
@@ -41,7 +41,11 @@ export function moveInSpine(next: boolean): Promise<SpineItemData | null> {
 	return invoke("navigate_adjacent", args);
 }
 
-export function moveToInSpine(path: string): Promise<SpineItemData | null> {
+export function moveToInSpine(path: string): Promise<SpineItemData> {
 	const args = { path };
 	return invoke("navigate_to", args);
+}
+
+export function reloadCurrent(): Promise<SpineItemData> {
+	return invoke("reload_current");
 }

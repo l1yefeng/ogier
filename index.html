@@ -10,26 +10,23 @@
 </head>
 
 <body id="og-body">
-  <h1 id="og-click-to-open" style="cursor: pointer">
-    Click to open an EPUB.
-  </h1>
+  <div id="og-click-to-open">
+    Click to open an EPUB
+  </div>
   <div id="og-frame" style="display: none;">
     <div id="og-reader-host"></div>
     <footer id="og-footer">
       <button id="og-toc-button" class="og-starting-icon">
-        <img height="16" src="/src/assets/fluent/book_24_regular.svg">
+        <img src="/src/assets/fluent/book_24_regular.svg">
         <span id="og-toc-button-label">Table of contents</span>
       </button>
-      <button id="og-details-button">
-        Details
-      </button>
-      <code id="og-spine-position"></code>
+      <span id="og-spine-position"></span>
       <label class="og-starting-icon">
-        <img height="16" src="/src/assets/fluent/text_font_size_24_regular.svg">
+        <img src="/src/assets/fluent/text_font_size_24_regular.svg">
         <input type="number" name="og-font-size" id="og-font-size" min="8" max="72" step="1" value="16">
       </label>
       <label class="og-starting-icon">
-        <img height="16" src="/src/assets/fluent/text_line_spacing_24_regular.svg">
+        <img src="/src/assets/fluent/text_line_spacing_24_regular.svg">
         <input type="number" name="og-spacing" id="og-spacing" min="2" max="60" step="1" value="10">
       </label>
     </footer>

@@ -1,3 +1,5 @@
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+
 import {
 	anchoredSamePageLocation,
 	APP_NAME,
@@ -9,6 +11,17 @@ import {
 	SpineItemData,
 } from "./base";
 import * as rs from "./invoke";
+import {
+	createBookDetailsUi,
+	createNavUi,
+	getModalsLanguage,
+	loadModalsContent,
+	mostRecentNavPoint,
+	setModalsLanguage,
+	showDetails,
+	showNotePreview,
+	showToc,
+} from "./modals";
 
 // Elements. Initialized in DOMContentLoaded listener.
 //
@@ -16,13 +29,6 @@ import * as rs from "./invoke";
 let elemReaderHost: HTMLElement | null;
 let elemFrame: HTMLElement | null;
 let elemTocButton: HTMLButtonElement | null;
-let elemDetailsButton: HTMLButtonElement | null;
-let elemTocModal: HTMLDialogElement | null;
-let elemTocNav: HTMLElement | null;
-let elemPreviewModal: HTMLDialogElement | null;
-let elemPreviewDiv: HTMLDivElement | null;
-let elemDetailsModal: HTMLDialogElement | null;
-let elemBookDetailsTable: HTMLTableElement | null;
 let elemSpinePosition: HTMLElement | null;
 let elemFontSizeInput: HTMLInputElement | null;
 let elemSpacingInput: HTMLInputElement | null;
@@ -38,20 +44,28 @@ document.addEventListener("DOMContentLoaded", () => {
 	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
 	elemReaderHost = document.getElementById("og-reader-host") as HTMLDivElement;
 	elemTocButton = document.getElementById("og-toc-button") as HTMLButtonElement;
-	elemDetailsButton = document.getElementById("og-details-button") as HTMLButtonElement;
-	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
-	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
-	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
-	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
-	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
-	elemBookDetailsTable = document.getElementById("og-book-details") as HTMLTableElement;
 	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
 	elemFontSizeInput = document.getElementById("og-font-size") as HTMLInputElement;
 	elemSpacingInput = document.getElementById("og-spacing") as HTMLInputElement;
 	elemTocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
+	loadModalsContent();
 
 	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
 	elemClickToOpen.addEventListener("click", event => handleClickToOpen(event as PointerEvent));
+
+	if (sessionStorage.getItem("reading")) {
+		rs.reloadCurrent()
+			.then(spineItem => {
+				elemClickToOpen!.remove();
+				return openEpub(spineItem);
+			})
+			.catch(err => {
+				window.alert(err);
+			})
+			.finally(() => {
+				sessionStorage.removeItem("reading");
+			});
+	}
 });
 
 function loadImageElement(
@@ -202,53 +216,14 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 
 	const btn = mostRecentNavPoint(spineItem.path, 0);
 	if (btn) {
-		elemTocBtnLabel!.lang = elemTocNav!.lang;
+		elemTocBtnLabel!.lang = getModalsLanguage();
 		elemTocBtnLabel!.textContent = btn.textContent;
 	} else {
 		elemTocBtnLabel!.removeAttribute("lang");
 		elemTocBtnLabel!.textContent = "Table of contents";
 	}
-}
 
-function createNavUi(navRoot: EpubNavPoint): void {
-	const ol = document.createElement("ol");
-	elemTocNav!.replaceChildren(ol);
-
-	ol.append(...navRoot.children.map(createNavPoint));
-
-	elemTocModal!.addEventListener("close", async () => {
-		const value = elemTocModal!.returnValue;
-		if (value) {
-			// If there is no hash, locationId is undefined.
-			const [path, locationId] = value.split("#", 2);
-			await navigateTo(path, locationId);
-		}
-	});
-}
-
-// TODO: be more precise
-function mostRecentNavPoint(currentPath: string, _offset: number): HTMLButtonElement | null {
-	return elemTocNav!.querySelector<HTMLButtonElement>(`button[data-path="${currentPath}"]`);
-}
-
-function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
-	const elemNavPoint = document.createElement("li");
-
-	const elemNavBtn = document.createElement("button");
-	elemNavBtn.textContent = navPoint.label;
-	elemNavBtn.value = navPoint.content;
-	const [path, locationId] = navPoint.content.split("#", 2);
-	elemNavBtn.dataset.path = path;
-	elemNavBtn.dataset.locationId = locationId || "";
-	elemNavPoint.appendChild(elemNavBtn);
-
-	if (navPoint.children.length > 0) {
-		const sub = document.createElement("ol");
-		sub.append(...navPoint.children.map(createNavPoint));
-		elemNavPoint.appendChild(sub);
-	}
-
-	return elemNavPoint;
+	sessionStorage.setItem("reading", "yes");
 }
 
 function handleClickToOpen(event: PointerEvent): void {
@@ -259,6 +234,7 @@ function handleClickToOpen(event: PointerEvent): void {
 				(event.target as HTMLElement).remove();
 				openEpub(initSpineItem);
 			}
+			// if not, user may have not opened one
 		})
 		.catch(err => {
 			window.alert(err);
@@ -289,10 +265,13 @@ function createPreviewContentRoot(elemLocation: HTMLElement): HTMLElement {
 	return elemLocation.cloneNode(true) as HTMLElement;
 }
 
-function createSamePageLocationPreview(anchor: HTMLElement, id: string): boolean {
+function createSamePageLocationPreviewContent(
+	anchor: HTMLElement,
+	id: string,
+): HTMLElement | null {
 	const elemLocation = readerShadowRoot!.getElementById(id);
 	if (!elemLocation) {
-		return false;
+		return null;
 	}
 
 	const previewContentRoot = createPreviewContentRoot(elemLocation);
@@ -308,18 +287,18 @@ function createSamePageLocationPreview(anchor: HTMLElement, id: string): boolean
 	}
 
 	if (!previewContentRoot.textContent?.trim()) {
-		return false;
+		return null;
 	}
 
-	elemPreviewDiv!.replaceChildren(...previewContentRoot.childNodes);
-	return true;
+	return previewContentRoot;
 }
 
 function previewSamePageLocation(anchor: HTMLElement, id: string): void {
 	const elem = readerShadowRoot!.getElementById(id);
 	if (elem) {
-		if (createSamePageLocationPreview(anchor, id)) {
-			elemPreviewModal!.showModal();
+		const contentRoot = createSamePageLocationPreviewContent(anchor, id);
+		if (contentRoot) {
+			showNotePreview(contentRoot);
 		}
 	}
 }
@@ -330,10 +309,6 @@ async function navigateTo(path: string, locationId?: string): Promise<void> {
 		spineItemData = await rs.moveToInSpine(path);
 	} catch (err) {
 		console.error(`Error jumping to ${path}:`, err);
-		return;
-	}
-	if (!spineItemData) {
-		console.error(`Page not found: ${path}`);
 		return;
 	}
 	await renderBookPage(spineItemData, 0);
@@ -368,8 +343,7 @@ function refreshUiWithBookMetadata(metadata: EpubMetadata): void {
 		const lang = metadata.language[0];
 		if (lang) {
 			elemReaderHost!.lang = lang;
-			elemTocNav!.lang = lang;
-			elemPreviewDiv!.lang = lang;
+			setModalsLanguage(lang);
 		}
 	}
 	if (metadata.title) {
@@ -380,49 +354,19 @@ function refreshUiWithBookMetadata(metadata: EpubMetadata): void {
 	}
 }
 
-function createBookDetailsUi(metadata: EpubMetadata): void {
-	elemBookDetailsTable!.replaceChildren(
-		...Object.entries(metadata).map(([key, values]) => {
-			const tr = document.createElement("tr");
-			const th = document.createElement("th");
-			const td = document.createElement("td");
-			tr.append(th, td);
-
-			th.textContent = key;
-
-			if (values) {
-				if (values.length > 1) {
-					// use a list
-					const ul = document.createElement("ul");
-					td.appendChild(ul);
-					ul.append(
-						...values.map(v => {
-							const li = document.createElement("li");
-							li.textContent = v;
-							return li;
-						}),
-					);
-				} else {
-					td.textContent = values[0];
-				}
-			}
-
-			return tr;
-		}),
-	);
-}
-
 async function initMetadata(): Promise<void> {
-	let result: EpubMetadata;
+	let metadata: EpubMetadata;
 	try {
-		result = await rs.getMetadata();
+		metadata = await rs.getMetadata();
 	} catch (err) {
 		console.error("Error loading metadata:", err);
 		return;
 	}
 
-	refreshUiWithBookMetadata(result);
-	createBookDetailsUi(result);
+	refreshUiWithBookMetadata(metadata);
+	createBookDetailsUi(metadata);
+
+	getCurrentWebviewWindow().listen("menu/file::details", showDetails);
 }
 
 async function initToc(): Promise<void> {
@@ -433,7 +377,9 @@ async function initToc(): Promise<void> {
 		console.error("Error loading TOC:", err);
 		return;
 	}
-	createNavUi(result);
+	createNavUi(result, navigateTo);
+
+	getCurrentWebviewWindow().listen("menu/file::table-of-contents", showToc);
 }
 
 async function openEpub(spineItem: SpineItemData): Promise<void> {
@@ -448,12 +394,7 @@ async function openEpub(spineItem: SpineItemData): Promise<void> {
 	readerShadowRoot.addEventListener("click", event =>
 		handleClickInReader(event as PointerEvent),
 	);
-	elemTocButton!.addEventListener("click", () => {
-		elemTocModal!.showModal();
-	});
-	elemDetailsButton!.addEventListener("click", () => {
-		elemDetailsModal!.showModal();
-	});
+	elemTocButton!.addEventListener("click", showToc);
 
 	renderBookPage(spineItem, 0);
 }

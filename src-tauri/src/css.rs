@@ -39,19 +39,19 @@ enum LineHeightValue {
 fn regulated_line_height(value: LineHeightValue) -> String {
     const SCALE_VAR: &str = "var(--og-space-scale)";
     match value {
-        LineHeightValue::Normal => format!("calc({} * 1.25)", SCALE_VAR),
-        LineHeightValue::Number(value) => format!("calc({} * {:.2})", SCALE_VAR, value),
+        LineHeightValue::Normal => format!("calc({SCALE_VAR} * 1.25)"),
+        LineHeightValue::Number(value) => format!("calc({SCALE_VAR} * {value:.2})"),
         LineHeightValue::Length(value, unit) => {
             // TODO: what about the other units?
             if unit.eq_ignore_ascii_case("em") {
-                format!("calc({} * {:.2})", SCALE_VAR, value)
+                format!("calc({SCALE_VAR} * {value:.2})")
             } else {
-                format!("{:.2}{}", value, unit)
+                format!("{value:.2}{unit}")
             }
         }
         LineHeightValue::Percentage(value) => {
             // Assume that the auther intended to use a unitless number
-            format!("calc({} * {:.2})", SCALE_VAR, value)
+            format!("calc({SCALE_VAR} * {value:.2})")
         }
     }
 }
@@ -127,7 +127,7 @@ pub fn regulate_css(css: &str) -> Option<String> {
                         }
                         Token::Dimension { value, unit, .. } => {
                             let s = match abs_length_in_rem(*value, unit) {
-                                Some(rem) => format!("{:.2}rem", rem),
+                                Some(rem) => format!("{rem:.2}rem"),
                                 None => token.to_css_string(),
                             };
                             output.push_str(&s);
@@ -139,7 +139,7 @@ pub fn regulate_css(css: &str) -> Option<String> {
                         }
                         Token::Ident(ident) => {
                             let s = match sml_in_rem(ident) {
-                                Some(rem) => format!("{:.2}rem", rem),
+                                Some(rem) => format!("{rem:.2}rem"),
                                 None => token.to_css_string(),
                             };
                             output.push_str(&s);
