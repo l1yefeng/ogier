@@ -44,3 +44,25 @@ pub struct SpineItem {
 }
 
 pub type Metadata = HashMap<String, Vec<String>>;
+
+#[derive(Serialize, Clone)]
+pub struct EpubFileInfo {
+    pub path: PathBuf,
+    pub size: u64,
+    pub created: u128,  // 0 if unavailable
+    pub modified: u128, // 0 if unavailable
+}
+
+#[derive(Serialize)]
+pub struct EpubDetails {
+    #[serde(rename = "fileInfo")]
+    pub file_info: EpubFileInfo,
+
+    pub metadata: Metadata,
+    #[serde(rename = "spineLength")]
+    pub spine_length: usize,
+    #[serde(rename = "displayTitle")]
+    pub display_title: String, // empty if no title
+    #[serde(rename = "coverBase64")]
+    pub cover_base64: String, // empty if no cover
+}

@@ -23,6 +23,21 @@ export interface EpubNavPoint {
 
 export type EpubMetadata = Record<string, string[]>;
 
+export interface EpubFileInfo {
+	path: string;
+	size: number;
+	created: number;
+	modified: number;
+}
+
+export interface EpubDetails {
+	fileInfo: EpubFileInfo;
+	metadata: EpubMetadata;
+	spineLength: number;
+	displayTitle: string;
+	coverBase64: string;
+}
+
 /**
  * Checks if `locationId` matches `elem` or nearby elements.
  *
@@ -76,4 +91,16 @@ export function anchoredSamePageLocation(elem: HTMLAnchorElement): string | null
 		return href.substring(1);
 	}
 	return null;
+}
+
+const SESSION_CONTINUE_KEY = "reading";
+
+export function markSessionInProgress(): void {
+	sessionStorage.setItem(SESSION_CONTINUE_KEY, "yes");
+}
+
+export function takeSessionInProgress(): boolean {
+	const yes = !!sessionStorage.getItem(SESSION_CONTINUE_KEY);
+	sessionStorage.removeItem(SESSION_CONTINUE_KEY);
+	return yes;
 }

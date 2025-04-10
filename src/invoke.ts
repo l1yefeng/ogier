@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CustomStyles, EpubMetadata, EpubNavPoint, SpineItemData } from "./base";
+import { CustomStyles, EpubDetails, EpubNavPoint, SpineItemData } from "./base";
 
 export function getResource(path: string): Promise<string> {
 	const args = { path };
 	return invoke("get_resource", args);
 }
 
-export function getMetadata(): Promise<EpubMetadata> {
-	return invoke("get_metadata");
+export function getDetails(): Promise<EpubDetails> {
+	return invoke("get_details");
 }
 
 export function getToc(): Promise<EpubNavPoint> {

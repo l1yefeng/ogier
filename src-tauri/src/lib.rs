@@ -7,6 +7,7 @@ use std::hash::Hasher;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, NavPoint};
@@ -21,7 +22,7 @@ use twox_hash::XxHash64;
 
 use css::regulate_css;
 use error::Error;
-use mepub::{Metadata, MyNavPoint, Navigation, SpineItem};
+use mepub::{EpubDetails, EpubFileInfo, MyNavPoint, Navigation, SpineItem};
 
 type Epub = EpubDoc<BufReader<File>>;
 type EpubHash = arrayvec::ArrayString<16>;
@@ -31,6 +32,7 @@ type CmdResult<T> = Result<T, Error>;
 struct AppData {
     book: Option<Epub>,
     book_hash: EpubHash,
+    book_file_info: EpubFileInfo,
 }
 
 impl AppData {
@@ -38,6 +40,12 @@ impl AppData {
         Self {
             book: None,
             book_hash: EpubHash::new(),
+            book_file_info: EpubFileInfo {
+                path: PathBuf::new(),
+                size: 0,
+                created: 0,
+                modified: 0,
+            },
         }
     }
 }
@@ -106,6 +114,13 @@ fn compute_book_hash(filepath: &PathBuf) -> CmdResult<EpubHash> {
     Ok(EpubHash::from(&format!("{hash:016x}")).unwrap())
 }
 
+fn resource_base64_encoded(content: Vec<u8>, mime: String) -> String {
+    let mut buf = mime;
+    buf.push_str(";base64,");
+    general_purpose::STANDARD.encode_string(content, &mut buf);
+    buf
+}
+
 #[tauri::command]
 fn get_resource(state: tauri::State<AppState>, path: String) -> CmdResult<String> {
     let (content, mime) = {
@@ -121,10 +136,7 @@ fn get_resource(state: tauri::State<AppState>, path: String) -> CmdResult<String
     };
 
     if mime.starts_with("image/") {
-        let mut buf = mime;
-        buf.push_str(";base64,");
-        general_purpose::STANDARD.encode_string(content, &mut buf);
-        Ok(buf)
+        Ok(resource_base64_encoded(content, mime))
     } else if mime.starts_with("text/") {
         let content = String::from_utf8(content)?;
         if path.ends_with(".css") {
@@ -195,10 +207,41 @@ fn navigate_to(
 }
 
 #[tauri::command]
-fn get_metadata(state: tauri::State<AppState>) -> CmdResult<Metadata> {
-    let state = state.lock().unwrap();
-    let book = state.book.as_ref().unwrap();
-    Ok(book.metadata.clone())
+fn get_details(state: tauri::State<AppState>) -> CmdResult<EpubDetails> {
+    let file_info = {
+        let state = state.lock().unwrap();
+        state.book_file_info.clone()
+    };
+    let (spine_length, metadata, cover) = {
+        let mut state = state.lock().unwrap();
+        let book = state.book.as_mut().unwrap();
+
+        (book.spine.len(), book.metadata.clone(), book.get_cover())
+    };
+
+    let title = metadata.get("title").and_then(|values| values.first());
+    let display_title = match title {
+        Some(title) => title.clone(),
+        None => String::from(
+            file_info
+                .path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
+        ),
+    };
+
+    let cover_base64 = cover
+        .map(|c_m| resource_base64_encoded(c_m.0, c_m.1))
+        .unwrap_or_default();
+
+    Ok(EpubDetails {
+        file_info,
+        metadata,
+        spine_length,
+        display_title,
+        cover_base64,
+    })
 }
 
 fn custom_stylesheet_path(
@@ -247,7 +290,7 @@ fn open_epub(
     state: tauri::State<AppState>,
     window: tauri::Window,
 ) -> CmdResult<Option<SpineItem>> {
-    let Some(file_path) = app
+    let Some(filepath) = app
         .dialog()
         .file()
         .add_filter("EPUB", &["epub"])
@@ -255,7 +298,7 @@ fn open_epub(
     else {
         return Ok(None); // file picking was cancelled
     };
-    let FilePath::Path(filepath) = file_path else {
+    let FilePath::Path(filepath) = filepath else {
         return Ok(None); // TODO unimplemented
     };
     // open file
@@ -269,9 +312,22 @@ fn open_epub(
 
     let book_hash = compute_book_hash(&filepath)?;
     {
+        let file_metadata = std::fs::metadata(&filepath)?;
+
+        let as_ms = |time: SystemTime| {
+            time.duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or_default()
+        };
+
         let mut state = state.lock().unwrap();
         state.book = Some(book);
         state.book_hash = book_hash;
+
+        state.book_file_info.path = filepath.clone();
+        state.book_file_info.size = file_metadata.len();
+        state.book_file_info.created = file_metadata.created().map(as_ms).unwrap_or_default();
+        state.book_file_info.modified = file_metadata.modified().map(as_ms).unwrap_or_default();
     }
 
     // retrieve progress. this happens only once
@@ -406,7 +462,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_custom_stylesheet,
-            get_metadata,
+            get_details,
             get_resource,
             get_toc,
             navigate_adjacent,

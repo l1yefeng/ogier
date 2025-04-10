@@ -1,4 +1,4 @@
-import { EpubMetadata, EpubNavPoint } from "./base";
+import { EpubDetails, EpubNavPoint } from "./base";
 
 let elemDetailsModal: HTMLDialogElement | null;
 let elemBookDetailsTable: HTMLTableElement | null;
@@ -28,9 +28,9 @@ export function getModalsLanguage(): string {
 // Details: metadata and book/file properties
 //
 
-export function createBookDetailsUi(metadata: EpubMetadata): void {
+export function createBookDetailsUi(details: EpubDetails): void {
 	elemBookDetailsTable!.replaceChildren(
-		...Object.entries(metadata).map(([key, values]) => {
+		...Object.entries(details.metadata).map(([key, values]) => {
 			const tr = document.createElement("tr");
 			const th = document.createElement("th");
 			const td = document.createElement("td");

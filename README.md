@@ -4,41 +4,52 @@ Small and fast.
 
 ## TODO
 
-- [ ] Improve performance when loading styles
-- [ ] When toc shows, current nav point is in the center and focused
-- [ ] External links
-- [ ] Store last read location: which line
-- [ ] Fetch font from archive
-- [ ] Read progress: which nav item?
-- [ ] Show cover
-- [ ] Drap and drop file to open
+- Improve performance when loading styles
+- Show cover and more in details modal
+- When toc shows, current nav point is in the center and focused
+- External links
+- Store last read location: which line
+- Fetch font from archive
+- Read progress: which nav item?
+- Drap and drop file to open
 
 ## App persistent state
 
-### Preferences
+prefs.json
 
-```js
-prefs = load("prefs.json")
-prefs = {
-    "default": {
-        "lineHeight": null,
-        "fontFamily": [
-            "serif",
-        ],
-        "fontFallback": {
-            "serif": ["Noto Serif"],
-            "sans-serif": ["Noto Sans"],
-            "Times": ["Times New Roman"],
-        },
-    },
-    "[zh]": {},
-    "books": {},
+```ts
+type FontName = string;
+
+interface NoLangPrefs {
+    fontPrefer: "sans-serif" | "serif";
+    fontFallbacks: Record<FontName, FontName[]>;
+}
+
+type Lang = "[zh-Hans]" | "[en]" | ...
+type PrefLang = "default" | Lang
+
+type Prefs = Record<PrefLang, NoLangPrefs>
+```
+
+*epub-id*.json
+
+```ts
+interface PerEpubCustomization {
+    baseFontSize: number;
+    spacingScale: number;
+    forceLang: Lang;
 }
 ```
 
-### Progress
+progress.json
 
-```js
-progress = load("progress.json")
-progress[bookHash] = [pageIndex, locationInPage]
+```ts
+interface Progess {
+    positionInSpine: number;
+    positionInItem: number;
+}
+
+type EpubId = string;
+
+type Progresses = Record<EpubId, Progress>
 ```
