@@ -7,10 +7,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ogier EPUB Reader</title>
   <script type="module" src="/src/main.ts" defer></script>
+  <script type="module" src="/src/fluent.ts" defer></script>
 </head>
 
 <body id="og-body">
-  <div id="og-click-to-open">
+  <div id="og-click-to-open" style="visibility: hidden;">
     Click to open an EPUB
   </div>
   <div id="og-frame" style="display: none;">
@@ -40,7 +41,22 @@
       <div id="og-preview-div"></div>
     </dialog>
     <dialog id="og-details-modal">
-      <table id="og-book-details"></table>
+      <div id="og-details-div">
+        <figure>
+          <img id="og-details-cover" alt="cover">
+          <figcaption>Book Cover Unavailable</figcaption>
+        </figure>
+        <fluent-tabs>
+          <fluent-tab>Book</fluent-tab>
+          <fluent-tab>File</fluent-tab>
+          <fluent-tab-panel>
+            <table id="og-book-details"></table>
+          </fluent-tab-panel>
+          <fluent-tab-panel>
+            <table id="og-file-details"></table>
+          </fluent-tab-panel>
+        </fluent-tabs>
+      </div>
     </dialog>
   </div>
 </body>

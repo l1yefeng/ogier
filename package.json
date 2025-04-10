@@ -11,6 +11,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fluentui/web-components": "^2.6.1",
     "@tauri-apps/api": "^2.4.1",
     "@tauri-apps/plugin-dialog": "~2.2.1",
     "@tauri-apps/plugin-opener": "^2.2.6",

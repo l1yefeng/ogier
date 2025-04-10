@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
 
 	const enableClickToOpen = () => {
-		elemClickToOpen.style.visibility = "visible";
+		elemClickToOpen.style.visibility = "";
 		elemClickToOpen.onclick = () => {
 			rs.openEpub()
 				.then(spineItem => {

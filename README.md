@@ -4,9 +4,8 @@ Small and fast.
 
 ## TODO
 
-- Improve performance when loading styles
-- Show cover and more in details modal
 - When toc shows, current nav point is in the center and focused
+- Improve performance when loading styles
 - External links
 - Store last read location: which line
 - Fetch font from archive

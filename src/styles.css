@@ -14,7 +14,6 @@
 
 #og-click-to-open {
     display: flex;
-    visibility: hidden;
     height: 100vh;
 
     align-items: center;
@@ -134,6 +133,42 @@
 
     li:hover {
         outline: 1px solid var(--color-active-control-outline);
+    }
+}
+
+/* Details modal */
+
+#og-details-div {
+    display: flex;
+    flex-direction: row;
+
+    figure {
+        img, h1 {
+            /* FIXME */
+            max-width: 30vw;
+            height: 20em;
+        }
+
+        figcaption {
+            font-size: smaller;
+            color: brown;
+        }
+    }
+
+    table {
+        th {
+            text-align: left;
+            vertical-align: initial;
+        }
+        td {
+            padding-inline-start: 1ch;
+            max-width: 40ch;
+            ol {
+                margin-block: 0;
+                padding-inline-start: 2ch;
+                list-style-type: lower-roman;
+            }
+        }
     }
 }
 

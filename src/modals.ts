@@ -2,6 +2,8 @@ import { EpubDetails, EpubNavPoint } from "./base";
 
 let elemDetailsModal: HTMLDialogElement | null;
 let elemBookDetailsTable: HTMLTableElement | null;
+let elemFileDetailsTable: HTMLTableElement | null;
+let elemDetailsCoverImg: HTMLImageElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
@@ -10,6 +12,8 @@ let elemPreviewDiv: HTMLDivElement | null;
 export function loadModalsContent(): void {
 	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
 	elemBookDetailsTable = document.getElementById("og-book-details") as HTMLTableElement;
+	elemDetailsCoverImg = document.getElementById("og-details-cover") as HTMLImageElement;
+	elemFileDetailsTable = document.getElementById("og-file-details") as HTMLTableElement;
 	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
@@ -29,35 +33,71 @@ export function getModalsLanguage(): string {
 //
 
 export function createBookDetailsUi(details: EpubDetails): void {
+	if (details.coverBase64) {
+		elemDetailsCoverImg!.src = `data:${details.coverBase64}`;
+		elemDetailsCoverImg!.nextElementSibling?.remove();
+	} else {
+		const h = document.createElement("h1");
+		h.textContent = details.displayTitle;
+		elemDetailsCoverImg!.replaceWith(h);
+	}
+
 	elemBookDetailsTable!.replaceChildren(
-		...Object.entries(details.metadata).map(([key, values]) => {
-			const tr = document.createElement("tr");
-			const th = document.createElement("th");
-			const td = document.createElement("td");
-			tr.append(th, td);
-
-			th.textContent = key;
-
-			if (values) {
-				if (values.length > 1) {
-					// use a list
-					const ul = document.createElement("ul");
-					td.appendChild(ul);
-					ul.append(
-						...values.map(v => {
-							const li = document.createElement("li");
-							li.textContent = v;
-							return li;
-						}),
-					);
-				} else {
-					td.textContent = values[0];
-				}
-			}
-
-			return tr;
-		}),
+		...Object.entries(details.metadata).map(([key, values]) =>
+			createDetailsTableRow(key, values),
+		),
 	);
+
+	elemFileDetailsTable!.replaceChildren(
+		createDetailsTableRow("Path", details.fileInfo.path),
+		createDetailsTableRow("Size", `${details.fileInfo.size.toLocaleString()} bytes`),
+	);
+	if (details.fileInfo.created) {
+		elemFileDetailsTable!.appendChild(
+			createDetailsTableRow("Created at", timeStringFromMs(details.fileInfo.created)),
+		);
+	}
+	if (details.fileInfo.modified) {
+		elemFileDetailsTable!.appendChild(
+			createDetailsTableRow("Modified at", timeStringFromMs(details.fileInfo.modified)),
+		);
+	}
+}
+
+function timeStringFromMs(ms: number): string {
+	const date = new Date();
+	date.setTime(ms);
+	return date.toLocaleString();
+}
+
+function createDetailsTableRow(prop: string, value: string | string[]): HTMLTableRowElement {
+	const tr = document.createElement("tr");
+	const th = document.createElement("th");
+	const td = document.createElement("td");
+	tr.append(th, td);
+
+	th.textContent = prop;
+
+	if (value instanceof Array) {
+		if (value.length > 1) {
+			// use a list
+			const ol = document.createElement("ol");
+			td.appendChild(ol);
+			ol.append(
+				...value.map(v => {
+					const li = document.createElement("li");
+					li.textContent = v;
+					return li;
+				}),
+			);
+		} else {
+			td.textContent = value[0];
+		}
+	} else {
+		td.textContent = value;
+	}
+
+	return tr;
 }
 
 export function showDetails(): void {
