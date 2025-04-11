@@ -1,3 +1,7 @@
+/**
+ * Parts of the UI that compose the details modal, TOC modal, and note preview modal.
+ */
+
 import { EpubDetails, EpubNavPoint } from "./base";
 
 let elemDetailsModal: HTMLDialogElement | null;

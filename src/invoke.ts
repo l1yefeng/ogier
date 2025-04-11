@@ -1,3 +1,10 @@
+/**
+ * Export all backend (rust) APIs.
+ * `invoke` from Tauri API should not be used anywhere outside this file.
+ *
+ * TODO: include listeners.
+ */
+
 import { invoke } from "@tauri-apps/api/core";
 import { CustomStyles, EpubDetails, EpubNavPoint, SpineItemData } from "./base";
 
@@ -14,7 +21,7 @@ export function getToc(): Promise<EpubNavPoint> {
 	return invoke("get_toc");
 }
 
-export function getCustomStyles(): Promise<CustomStyles | null> {
+export function getCustomStyles(): Promise<Partial<CustomStyles> | null> {
 	return invoke("get_custom_stylesheet").then(result => {
 		const savedSettings = result as string;
 		if (savedSettings) {

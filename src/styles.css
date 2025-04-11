@@ -1,5 +1,5 @@
 :root {
-    --font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font: system-ui;
     --color-active-control-background: #e5f3ff;
     --color-active-control-outline: #74bcfc;
 
@@ -177,5 +177,6 @@
 #og-preview-div {
     .og-note-icon::before {
         content: url(/src/assets/fluent/notebook_arrow_curve_down_20_regular.svg);
+        vertical-align: middle;
     }
 }

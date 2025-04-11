@@ -1,3 +1,7 @@
+/**
+ * Used by anyone.
+ */
+
 export const APP_NAME = "Ogier EPUB Reader";
 
 export interface SpineItemData {
@@ -9,10 +13,12 @@ export interface SpineItemData {
 	text: string;
 }
 
-export interface CustomStyles {
-	baseFontSize?: number;
-	spacingScale?: number;
+export enum CustomStyleKey {
+	BaseFontSize = "base-font-size",
+	LineHeightScale = "line-height-scale",
+	InlineMargin = "inline-margin",
 }
+export type CustomStyles = Record<CustomStyleKey, number>;
 
 export interface EpubNavPoint {
 	label: string;
@@ -103,4 +109,10 @@ export function takeSessionInProgress(): boolean {
 	const yes = !!sessionStorage.getItem(SESSION_CONTINUE_KEY);
 	sessionStorage.removeItem(SESSION_CONTINUE_KEY);
 	return yes;
+}
+
+export function clamp(value: number, min: number, max: number): number {
+	if (value < min) return min;
+	if (value > max) return max;
+	return value;
 }

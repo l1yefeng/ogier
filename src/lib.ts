@@ -3,6 +3,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
 	anchoredSamePageLocation,
 	APP_NAME,
+	clamp,
+	CustomStyleKey,
 	CustomStyles,
 	EpubDetails,
 	EpubNavPoint,
@@ -23,6 +25,12 @@ import {
 	showNotePreview,
 	showToc,
 } from "./modals";
+import {
+	activateCustomizationInput,
+	commitCustomStylesFromSaved,
+	eventTargetIsCustomizationInput,
+	loadCustomizationContent,
+} from "./custom";
 
 // Elements. Initialized in DOMContentLoaded listener.
 //
@@ -32,8 +40,6 @@ let elemReaderHost: HTMLElement | null;
 let elemTocButton: HTMLButtonElement | null;
 let elemTocBtnLabel: HTMLElement | null;
 let elemSpinePosition: HTMLElement | null;
-let elemFontSizeInput: HTMLInputElement | null;
-let elemSpacingInput: HTMLInputElement | null;
 
 // Other global variables. Lazily initialized.
 //
@@ -47,8 +53,7 @@ export function loadContent(): void {
 	elemTocButton = document.getElementById("og-toc-button") as HTMLButtonElement;
 	elemTocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
 	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
-	elemFontSizeInput = document.getElementById("og-font-size") as HTMLInputElement;
-	elemSpacingInput = document.getElementById("og-spacing") as HTMLInputElement;
+	loadCustomizationContent();
 	loadModalsContent();
 }
 
@@ -72,29 +77,25 @@ function loadImageElement(
 		});
 }
 
-function stagedCustomStyles(): CustomStyles {
-	return {
-		baseFontSize: elemFontSizeInput?.valueAsNumber,
-		spacingScale: elemSpacingInput?.valueAsNumber,
-	};
-}
+function commitCustomStyles(readerStylesheet: CSSStyleSheet, styles: CustomStyles): void {
+	const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
+	const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
+	const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 500);
 
-function commitCustomStyles(stylesheet: CSSStyleSheet): void {
-	const staged = stagedCustomStyles();
-	const baseFontSize = staged.baseFontSize ?? 16;
-	const spacingScale = (staged.spacingScale ?? 10) / 10;
+	const baseFontSizeCss = baseFontSize.toFixed(2) + "px";
+	const lineHeightScaleCss = lineHeightScale.toFixed(3);
+	const hostLineHeightCss = (lineHeightScale * 1.25).toFixed(2);
+	const inlineMarginCss = `${(inlineMargin / 2).toFixed(2)}rem`;
 
-	const padding = 16 * Math.pow(spacingScale, 1.5);
-	elemReaderHost!.style.paddingInline = `${padding.toFixed(2)}px`;
+	elemReaderHost!.style.paddingInline = inlineMarginCss;
 	const hostStyle = `
 		:host {
-			--og-space-scale: ${spacingScale};
-			--og-font-size: ${baseFontSize}px;
-			font-size: var(--og-font-size);
-			line-height: ${spacingScale * 1.25};
+			--og-line-height-scale: ${lineHeightScaleCss};
+			font-size: ${baseFontSizeCss};
+			line-height: ${hostLineHeightCss};
 		}
 	`;
-	stylesheet.replaceSync(hostStyle);
+	readerStylesheet.replaceSync(hostStyle);
 }
 
 async function renderBookPage(spineItem: SpineItemData, scroll: number | null): Promise<void> {
@@ -166,27 +167,17 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 
 	const stylesheetCustom = new CSSStyleSheet();
 	stylesheets.push(stylesheetCustom);
-	let customStyles: CustomStyles | null = null;
+	let customStyles: Partial<CustomStyles>;
 	try {
-		customStyles = await rs.getCustomStyles();
+		customStyles = (await rs.getCustomStyles()) || {};
 	} catch (err) {
 		console.error("Error loading saved custom styles:", err);
+		customStyles = {};
 	}
-	if (customStyles) {
-		if (customStyles.baseFontSize) {
-			elemFontSizeInput!.value = customStyles.baseFontSize.toString();
-		}
-		if (customStyles.spacingScale) {
-			elemSpacingInput!.value = customStyles.spacingScale.toString();
-		}
-	}
-	commitCustomStyles(stylesheetCustom);
-	const handleCustomStyleInputChange = () => {
-		commitCustomStyles(stylesheetCustom);
-		rs.setCustomStyles(stagedCustomStyles());
-	};
-	elemFontSizeInput!.onchange = handleCustomStyleInputChange;
-	elemSpacingInput!.onchange = handleCustomStyleInputChange;
+	const localStylesCommit = (styles: CustomStyles) =>
+		commitCustomStyles(stylesheetCustom, styles);
+	commitCustomStylesFromSaved(customStyles, localStylesCommit);
+	activateCustomizationInput(localStylesCommit, rs.setCustomStyles);
 
 	readerShadowRoot!.adoptedStyleSheets = stylesheets;
 	readerShadowRoot!.replaceChildren();
@@ -380,7 +371,7 @@ function moveInSpine(next: boolean): void {
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {
-	if (event.target == elemFontSizeInput || event.target == elemSpacingInput) {
+	if (eventTargetIsCustomizationInput(event)) {
 		return;
 	}
 

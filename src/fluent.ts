@@ -1,3 +1,8 @@
+/**
+ * Register Fluent UI web components.
+ * Imported by HTML directly.
+ */
+
 import {
 	fluentTab,
 	fluentTabPanel,

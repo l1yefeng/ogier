@@ -37,7 +37,7 @@ enum LineHeightValue {
 }
 
 fn regulated_line_height(value: LineHeightValue) -> String {
-    const SCALE_VAR: &str = "var(--og-space-scale)";
+    const SCALE_VAR: &str = "var(--og-line-height-scale)";
     match value {
         LineHeightValue::Normal => format!("calc({SCALE_VAR} * 1.25)"),
         LineHeightValue::Number(value) => format!("calc({SCALE_VAR} * {value:.2})"),

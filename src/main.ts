@@ -1,3 +1,7 @@
+/**
+ * The entry file, imported in HTML directly.
+ */
+
 import { takeSessionInProgress } from "./base";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
