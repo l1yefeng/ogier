@@ -2,6 +2,8 @@
     --font: system-ui;
     --color-active-control-background: #e5f3ff;
     --color-active-control-outline: #74bcfc;
+    --color-active-item-text: #1469b3;
+    --color-warning-text: brown;
 
     font-family: var(--font);
 }
@@ -129,6 +131,13 @@
         &:hover {
             background-color: var(--color-active-control-background);
         }
+
+        &:disabled {
+            color: var(--color-active-item-text);
+        }
+        &:disabled:hover {
+            background-color: inherit;
+        }
     }
 
     li:hover {
@@ -151,7 +160,7 @@
 
         figcaption {
             font-size: smaller;
-            color: brown;
+            color: var(--color-warning-text);
         }
     }
 

@@ -21,6 +21,9 @@ pub enum Error {
 
     #[error("The given path cannot be found")]
     ResourcePathNotFound,
+
+    #[error("The EPUB does not have TOC")]
+    EpubHasNoToc,
 }
 
 impl Serialize for Error {

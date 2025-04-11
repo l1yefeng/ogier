@@ -4,9 +4,10 @@ Small and fast.
 
 ## TODO
 
-- When toc shows, current nav point is in the center and focused
+- EPUB3
+- key events: keyup is sometimes accidental; KeyDown sometimes doesn't have focus
 - Improve performance when loading styles
-- External links
+- Improve CSS parser
 - Store last read location: which line
 - Fetch font from archive
 - Read progress: which nav item?

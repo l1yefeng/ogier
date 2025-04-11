@@ -131,7 +131,7 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	return elemNavPoint;
 }
 
-export function createNavUi(
+export function createTocUi(
 	navRoot: EpubNavPoint,
 	navigateTo: (path: string, locationId?: string) => Promise<void>,
 ): void {
@@ -150,16 +150,31 @@ export function createNavUi(
 	});
 }
 
+let lastMostRecentNavPoint: HTMLButtonElement | null = null;
+
 // TODO: be more precise
 export function mostRecentNavPoint(
 	currentPath: string,
 	_offset: number,
 ): HTMLButtonElement | null {
-	return elemTocNav!.querySelector<HTMLButtonElement>(`button[data-path="${currentPath}"]`);
+	const btn = elemTocNav!.querySelector<HTMLButtonElement>(
+		`button[data-path="${currentPath}"]`,
+	);
+	if (btn) {
+		if (lastMostRecentNavPoint) {
+			lastMostRecentNavPoint.autofocus = false;
+			lastMostRecentNavPoint.disabled = false;
+		}
+		btn.autofocus = true;
+		btn.disabled = true;
+		lastMostRecentNavPoint = btn;
+	}
+	return btn;
 }
 
 export function showToc(): void {
 	elemTocModal!.showModal();
+	lastMostRecentNavPoint?.scrollIntoView();
 }
 
 // Note preview

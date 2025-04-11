@@ -1,10 +1,10 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
 	anchoredSamePageLocation,
 	APP_NAME,
-	clamp,
-	CustomStyleKey,
 	CustomStyles,
 	EpubDetails,
 	EpubNavPoint,
@@ -16,7 +16,7 @@ import {
 import * as rs from "./invoke";
 import {
 	createBookDetailsUi,
-	createNavUi,
+	createTocUi,
 	getModalsLanguage,
 	loadModalsContent,
 	mostRecentNavPoint,
@@ -31,6 +31,7 @@ import {
 	eventTargetIsCustomizationInput,
 	loadCustomizationContent,
 } from "./custom";
+import { Styler } from "./styler";
 
 // Elements. Initialized in DOMContentLoaded listener.
 //
@@ -44,8 +45,9 @@ let elemSpinePosition: HTMLElement | null;
 // Other global variables. Lazily initialized.
 //
 
-// See openEpub() for initialization.
+// See initReaderFrame() for initilization
 let readerShadowRoot: ShadowRoot | null = null;
+let styler: Styler | null = null;
 
 export function loadContent(): void {
 	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
@@ -77,28 +79,29 @@ function loadImageElement(
 		});
 }
 
-function commitCustomStyles(readerStylesheet: CSSStyleSheet, styles: CustomStyles): void {
-	const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
-	const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
-	const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 500);
+async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
+	const linkedPaths = [];
+	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
+		const path = elemLink.href.substring(7);
+		linkedPaths.push(path);
+		elemLink.remove();
+	}
+	await styler!.load(linkedPaths);
 
-	const baseFontSizeCss = baseFontSize.toFixed(2) + "px";
-	const lineHeightScaleCss = lineHeightScale.toFixed(3);
-	const hostLineHeightCss = (lineHeightScale * 1.25).toFixed(2);
-	const inlineMarginCss = `${(inlineMargin / 2).toFixed(2)}rem`;
-
-	elemReaderHost!.style.paddingInline = inlineMarginCss;
-	const hostStyle = `
-		:host {
-			--og-line-height-scale: ${lineHeightScaleCss};
-			font-size: ${baseFontSizeCss};
-			line-height: ${hostLineHeightCss};
+	let cssInPage = "";
+	for (const elemStyle of head.querySelectorAll<HTMLStyleElement>("style")) {
+		const css = elemStyle.textContent;
+		if (css) {
+			cssInPage += css;
 		}
-	`;
-	readerStylesheet.replaceSync(hostStyle);
+	}
+	styler!.setInPageStylesheet(cssInPage);
 }
 
 async function renderBookPage(spineItem: SpineItemData, scroll: number | null): Promise<void> {
+	// Remove everything first
+	readerShadowRoot!.replaceChildren();
+
 	const parser = new DOMParser();
 	const pageDoc = parser.parseFromString(spineItem.text, "application/xhtml+xml");
 	const pageBody = pageDoc.body;
@@ -125,48 +128,8 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 		}
 	});
 
-	// load styles
-	// TODO (optimize) don't need to re-fetch the same <link>
-	const stylesheets: CSSStyleSheet[] = [];
-	// TODO (optimize) parallellize
-	for (const elemLink of pageDoc.head.querySelectorAll<HTMLLinkElement>(
-		'link[rel="stylesheet"]',
-	)) {
-		const path = elemLink.href.substring(7);
-		let css: string;
-		try {
-			css = await rs.getResource(path);
-			console.debug(`loaded stylesheet ${path}: `, css);
-		} catch (err) {
-			console.error(`Error loading stylesheet ${path}:`, err);
-			continue;
-		}
-		if (!css) {
-			console.error(`Resource not found: ${path}`);
-			continue;
-		}
-		const stylesheet = new CSSStyleSheet();
-		stylesheet.replace(css);
-		stylesheets.push(stylesheet);
-	}
+	await loadPageStyles(pageDoc.head);
 
-	const stylesheetInPage = new CSSStyleSheet();
-	stylesheets.push(stylesheetInPage);
-	let cssInPage = `
-		img {
-			max-width: 100%;
-		}
-    `;
-	for (const elemStyle of pageDoc.head.querySelectorAll<HTMLStyleElement>("style")) {
-		const css = elemStyle.textContent;
-		if (css) {
-			cssInPage += css;
-		}
-	}
-	stylesheetInPage.replace(cssInPage);
-
-	const stylesheetCustom = new CSSStyleSheet();
-	stylesheets.push(stylesheetCustom);
 	let customStyles: Partial<CustomStyles>;
 	try {
 		customStyles = (await rs.getCustomStyles()) || {};
@@ -174,13 +137,10 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 		console.error("Error loading saved custom styles:", err);
 		customStyles = {};
 	}
-	const localStylesCommit = (styles: CustomStyles) =>
-		commitCustomStyles(stylesheetCustom, styles);
+	const localStylesCommit = (styles: CustomStyles) => styler!.setCustomStylesheet(styles);
 	commitCustomStylesFromSaved(customStyles, localStylesCommit);
 	activateCustomizationInput(localStylesCommit, rs.setCustomStyles);
 
-	readerShadowRoot!.adoptedStyleSheets = stylesheets;
-	readerShadowRoot!.replaceChildren();
 	// insert the body
 	readerShadowRoot!.appendChild(pageBody);
 	if (scroll != null) {
@@ -291,9 +251,31 @@ function handleClickInReader(event: PointerEvent): void {
 		const samePageId = anchoredSamePageLocation(elemAnchor);
 		if (samePageId) {
 			previewSamePageLocation(elemAnchor, samePageId);
-		} else if (elemAnchor.href.startsWith("epub://")) {
-			const [path, locationId] = elemAnchor.href.substring(7).split("#", 2);
-			navigateTo(path, locationId);
+		} else {
+			const href = elemAnchor.href;
+			if (href.startsWith("epub://")) {
+				const [path, locationId] = elemAnchor.href.substring(7).split("#", 2);
+				navigateTo(path, locationId);
+			} else if (
+				href.startsWith("http://") ||
+				href.startsWith("https://") ||
+				href.startsWith("mailto:") ||
+				href.startsWith("tel:")
+			) {
+				// open externally
+				confirm(`Open ${href} using system default application`, {
+					title: "Confirm",
+					kind: "warning",
+				})
+					.then(confirmed => {
+						if (confirmed) {
+							return openUrl(href);
+						}
+					})
+					.catch(err => {
+						window.alert(`Error opening ${href}: ${err}`);
+					});
+			}
 		}
 	}
 }
@@ -332,9 +314,11 @@ async function initToc(): Promise<void> {
 		result = await rs.getToc();
 	} catch (err) {
 		console.error("Error loading TOC:", err);
+		elemTocButton!.disabled = true;
+		elemTocButton!.title = "Table of contents not available";
 		return;
 	}
-	createNavUi(result, navigateTo);
+	createTocUi(result, navigateTo);
 
 	getCurrentWebviewWindow().listen("menu/file::table-of-contents", showToc);
 }
@@ -346,6 +330,7 @@ export async function initReaderFrame(spineItem: SpineItemData): Promise<void> {
 	// show reader
 	elemFrame!.style.display = ""; // use display value in css
 	readerShadowRoot = elemReaderHost!.attachShadow({ mode: "open" });
+	styler = new Styler(readerShadowRoot);
 	// setup reader event listeners
 	document.body.addEventListener("keyup", handleKeyEvent);
 	readerShadowRoot.addEventListener("click", event =>

@@ -158,12 +158,17 @@ fn get_toc(state: tauri::State<AppState>) -> CmdResult<MyNavPoint> {
         book.toc.clone()
     };
 
-    Ok(MyNavPoint(NavPoint {
-        label: String::new(),
-        content: PathBuf::new(),
-        children: toc,
-        play_order: 0,
-    }))
+    if toc.is_empty() {
+        Err(Error::EpubHasNoToc)
+        // TODO: Disable the menu item
+    } else {
+        Ok(MyNavPoint(NavPoint {
+            label: String::new(),
+            content: PathBuf::new(),
+            children: toc,
+            play_order: 0,
+        }))
+    }
 }
 
 #[tauri::command]
@@ -354,6 +359,9 @@ fn complete_menu(window: &tauri::Window) -> Result<(), tauri::Error> {
     file_submenu.as_submenu_unchecked().insert_items(
         &[
             &PredefinedMenuItem::separator(window)?,
+            &MenuItemBuilder::new("&Show in folder")
+                .id("file::show-in-folder")
+                .build(window)?,
             &MenuItemBuilder::new("&Details")
                 .id("file::details")
                 .build(window)?,
@@ -377,6 +385,17 @@ fn complete_menu(window: &tauri::Window) -> Result<(), tauri::Error> {
 
 fn setup_menu_listener(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
     app.on_menu_event(move |handle, event| match event.id().0.as_str() {
+        "file::show-in-folder" => {
+            // Show file in folder
+            let filepath = {
+                let state = handle.state::<AppState>();
+                let state = state.lock().unwrap();
+                state.book_file_info.path.clone()
+            };
+            if let Err(err) = handle.opener().reveal_item_in_dir(filepath) {
+                eprintln!("ERR: Failed to show file in folder: {}", err);
+            }
+        }
         id @ ("file::details" | "file::table-of-contents") => {
             // Show table of contents in front end
             if let Err(err) = handle.emit_to("main", &format!("menu/{id}"), ()) {
