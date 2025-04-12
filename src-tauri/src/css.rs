@@ -1,5 +1,5 @@
 use arrayvec::ArrayString;
-use cssparser::{Delimiter, ParseError, Parser, ParserInput, ToCss, Token};
+use cssparser::{ParseError, Parser, ParserInput, ToCss, Token};
 
 fn abs_length_in_rem(value: f32, unit: &str) -> Option<f32> {
     const BASE_FONT_SIZE: f32 = 16.0;
@@ -56,6 +56,76 @@ fn regulated_line_height(value: LineHeightValue) -> String {
     }
 }
 
+fn transform_css<'i>(
+    parser: &mut Parser<'i, '_>,
+    output: &mut String,
+    mut expect_line_height: bool,
+) -> Result<(), ParseError<'i, ()>> {
+    while let Ok(token) = parser.next_including_whitespace() {
+        match token {
+            Token::Semicolon => {
+                output.push(';');
+                // don't expect forever
+                expect_line_height = false;
+            }
+            Token::Ident(ident) if ident.eq_ignore_ascii_case("line-height") => {
+                output.push_str("line-height");
+                expect_line_height = true;
+            }
+            Token::Dimension { int_value, .. } if int_value.is_some_and(|i| i == 0) => {
+                output.push('0');
+            }
+            // line height
+            Token::Ident(ident) if expect_line_height && ident.eq_ignore_ascii_case("normal") => {
+                output.push_str(&regulated_line_height(LineHeightValue::Normal));
+            }
+            Token::Percentage { unit_value, .. } if expect_line_height => {
+                output.push_str(&regulated_line_height(LineHeightValue::Percentage(
+                    *unit_value,
+                )));
+            }
+            Token::Number { value, .. } if expect_line_height => {
+                output.push_str(&regulated_line_height(LineHeightValue::Number(*value)));
+            }
+            Token::Dimension { value, unit, .. } if expect_line_height => {
+                output.push_str(&regulated_line_height(LineHeightValue::Length(
+                    *value,
+                    ArrayString::from(unit).unwrap_or_default(),
+                )));
+            }
+            // font size
+            Token::Dimension { value, unit, .. } => {
+                let s = match abs_length_in_rem(*value, unit) {
+                    Some(rem) => format!("{rem:.2}rem"),
+                    None => token.to_css_string(),
+                };
+                output.push_str(&s);
+            }
+            Token::Ident(ident) => {
+                let s = match sml_in_rem(ident) {
+                    Some(rem) => format!("{rem:.2}rem"),
+                    None => ident.to_string(),
+                };
+                output.push_str(&s);
+            }
+            _ => output.push_str(&token.to_css_string()),
+        }
+        let close = match token {
+            Token::Function(_) | Token::ParenthesisBlock => Some(')'),
+            Token::SquareBracketBlock => Some(']'),
+            Token::CurlyBracketBlock => Some('}'),
+            _ => None,
+        };
+        if let Some(close) = close {
+            parser.parse_nested_block(|parser_nested| {
+                transform_css(parser_nested, output, expect_line_height)
+            })?;
+            output.push(close);
+        }
+    }
+    Ok(())
+}
+
 pub fn regulate_css(css: &str) -> Option<String> {
     println!("Regulating CSS: {}", css);
     let mut output = String::new();
@@ -63,123 +133,8 @@ pub fn regulate_css(css: &str) -> Option<String> {
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
 
-    // FIXME: is is_exhausted() necessary?
-    // FIXME: use a stack to keep track of nested blocks
-    // FIXME: does identifier token need to be handled differently?
-    while !parser.is_exhausted() {
-        if let Err(_) = parser.parse_until_before(Delimiter::CurlyBracketBlock, |parser_pre_cb| {
-            while let Ok(token) = parser_pre_cb.next_including_whitespace() {
-                output.push_str(&token.to_css_string());
-                match token {
-                    Token::Function(_) | Token::ParenthesisBlock => {
-                        parser_pre_cb.parse_nested_block(|parser_nested| {
-                            while let Ok(token) = parser_nested.next_including_whitespace() {
-                                output.push_str(&token.to_css_string());
-                            }
-                            Ok::<(), ParseError<'_, ()>>(())
-                        })?;
-                        output.push(')');
-                    }
-                    Token::SquareBracketBlock => {
-                        parser_pre_cb.parse_nested_block(|parser_nested| {
-                            while let Ok(token) = parser_nested.next_including_whitespace() {
-                                output.push_str(&token.to_css_string());
-                            }
-                            Ok::<(), ParseError<'_, ()>>(())
-                        })?;
-                        output.push(']');
-                    }
-                    _ => {}
-                }
-            }
-            Ok::<(), ParseError<'_, ()>>(())
-        }) {
-            return None;
-        };
-        if let Ok(_) = parser.expect_curly_bracket_block() {
-            output.push('{');
-            if let Err(_) = parser.parse_nested_block(|parser_in_cb| {
-                let mut expect_line_height = false;
-                while let Ok(token) = parser_in_cb.next_including_whitespace() {
-                    match token {
-                        Token::Semicolon => {
-                            output.push(';');
-                            // don't expect forever
-                            expect_line_height = false;
-                        }
-                        Token::Percentage { unit_value, .. } if expect_line_height => {
-                            output.push_str(&regulated_line_height(LineHeightValue::Percentage(
-                                *unit_value,
-                            )));
-                        }
-                        Token::Number { value, .. } if expect_line_height => {
-                            output
-                                .push_str(&regulated_line_height(LineHeightValue::Number(*value)));
-                        }
-                        Token::Dimension { int_value, .. } if int_value.is_some_and(|i| i == 0) => {
-                            output.push_str("0");
-                        }
-                        Token::Dimension { value, unit, .. } if expect_line_height => {
-                            output.push_str(&regulated_line_height(LineHeightValue::Length(
-                                *value,
-                                ArrayString::from(unit).unwrap_or_default(),
-                            )));
-                        }
-                        Token::Dimension { value, unit, .. } => {
-                            let s = match abs_length_in_rem(*value, unit) {
-                                Some(rem) => format!("{rem:.2}rem"),
-                                None => token.to_css_string(),
-                            };
-                            output.push_str(&s);
-                        }
-                        Token::Ident(ident)
-                            if expect_line_height && ident.eq_ignore_ascii_case("normal") =>
-                        {
-                            output.push_str(&regulated_line_height(LineHeightValue::Normal));
-                        }
-                        Token::Ident(ident) => {
-                            let s = match sml_in_rem(ident) {
-                                Some(rem) => format!("{rem:.2}rem"),
-                                None => token.to_css_string(),
-                            };
-                            output.push_str(&s);
-                            if ident.eq_ignore_ascii_case("line-height") {
-                                expect_line_height = true;
-                            }
-                        }
-                        Token::Function(_) | Token::ParenthesisBlock => {
-                            output.push_str(&token.to_css_string());
-                            parser_in_cb.parse_nested_block(|parser_nested| {
-                                while let Ok(token) = parser_nested.next_including_whitespace() {
-                                    output.push_str(&token.to_css_string());
-                                }
-                                Ok::<(), ParseError<'_, ()>>(())
-                            })?;
-                            output.push(')');
-                        }
-                        Token::SquareBracketBlock => {
-                            output.push_str(&token.to_css_string());
-                            parser_in_cb.parse_nested_block(|parser_nested| {
-                                while let Ok(token) = parser_nested.next_including_whitespace() {
-                                    output.push_str(&token.to_css_string());
-                                }
-                                Ok::<(), ParseError<'_, ()>>(())
-                            })?;
-                            output.push(']');
-                        }
-                        _ => {
-                            output.push_str(&token.to_css_string());
-                        }
-                    }
-                }
-                Ok::<(), ParseError<'_, ()>>(())
-            }) {
-                return None;
-            }
-            output.push('}');
-        } else {
-            break;
-        }
+    if let Err(_) = transform_css(&mut parser, &mut output, false) {
+        return None;
     }
 
     Some(output)
@@ -187,15 +142,20 @@ pub fn regulate_css(css: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-
     use crate::regulate_css;
 
     #[test]
-    fn test_regulate_css_with_px_units() {
+    fn test_regulate_css_font_size() {
         let input =
             "body { font-size: 16px; margin: 32px; } p { padding: 8px; } a { font-size: medium; }";
-        let expected =
-            "body{font-size:1.00rem;margin:2.00rem;}p{padding:0.50rem;}a{font-size:1.00rem;}";
-        assert_eq!(regulate_css(input), Some(String::from(expected)));
+        let expected = "body { font-size: 1.00rem; margin: 2.00rem; } p { padding: 0.50rem; } a { font-size: 1.00rem; }";
+        assert_eq!(regulate_css(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_regulate_css_nesting() {
+        let input = "body { color: green; p { color: red; a { color: blue } } }";
+        let expected = "body { color: green; p { color: red; a { color: blue } } }";
+        assert_eq!(regulate_css(input).unwrap(), expected);
     }
 }
