@@ -48,6 +48,7 @@ let elemSpinePosition: HTMLElement | null;
 // See initReaderFrame() for initilization
 let readerShadowRoot: ShadowRoot | null = null;
 let styler: Styler | null = null;
+let refreshTocBtnLabelId: number | null = null;
 
 export function loadContent(): void {
 	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
@@ -149,14 +150,28 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 
 	elemSpinePosition!.textContent = `Position: ${spineItem.position}`;
 
-	const btn = mostRecentNavPoint(spineItem.path, 0);
-	if (btn) {
-		elemTocBtnLabel!.lang = getModalsLanguage();
-		elemTocBtnLabel!.textContent = btn.textContent;
-	} else {
-		elemTocBtnLabel!.removeAttribute("lang");
-		elemTocBtnLabel!.textContent = "Table of contents";
-	}
+	const refreshTocBtnLabel = () => {
+		const bodyTop = pageBody.getBoundingClientRect().top;
+		const bodyMarginTop = getComputedStyle(pageBody).marginBlockStart;
+		const currentOffset = parseFloat(bodyMarginTop) - bodyTop + 0.5;
+		const btn = mostRecentNavPoint(spineItem.path, currentOffset, id => {
+			const target = readerShadowRoot!.getElementById(id);
+			if (!target) {
+				return 0;
+			}
+			return target.getBoundingClientRect().top - bodyTop;
+		});
+		if (btn) {
+			elemTocBtnLabel!.lang = getModalsLanguage();
+			elemTocBtnLabel!.textContent = btn.textContent;
+		} else {
+			elemTocBtnLabel!.removeAttribute("lang");
+			elemTocBtnLabel!.textContent = "Table of contents";
+		}
+	};
+	window.clearInterval(refreshTocBtnLabelId ?? undefined);
+	refreshTocBtnLabelId = window.setInterval(refreshTocBtnLabel, 1000);
+	refreshTocBtnLabel();
 
 	markSessionInProgress();
 }

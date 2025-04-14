@@ -120,6 +120,7 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 	const [path, locationId] = navPoint.content.split("#", 2);
 	elemNavBtn.dataset.path = path;
 	elemNavBtn.dataset.locationId = locationId || "";
+	elemNavBtn.dataset.playOrder = navPoint.playOrder.toString();
 	elemNavPoint.appendChild(elemNavBtn);
 
 	if (navPoint.children.length > 0) {
@@ -152,15 +153,32 @@ export function createTocUi(
 
 let lastMostRecentNavPoint: HTMLButtonElement | null = null;
 
-// TODO: be more precise
 export function mostRecentNavPoint(
 	currentPath: string,
-	_offset: number,
+	offset: number,
+	getAnchoredOffset: (id: string) => number,
 ): HTMLButtonElement | null {
-	const btn = elemTocNav!.querySelector<HTMLButtonElement>(
+	const buttons = elemTocNav!.querySelectorAll<HTMLButtonElement>(
 		`button[data-path="${currentPath}"]`,
 	);
-	if (btn) {
+	if (buttons.length == 0) {
+		return null;
+	}
+
+	let mostRecent: [number, HTMLButtonElement] | null = null;
+	for (const btn of buttons) {
+		const anchoredOffset = btn.dataset.locationId
+			? getAnchoredOffset(btn.dataset.locationId)
+			: 0;
+		if (offset >= anchoredOffset) {
+			if (mostRecent == null || anchoredOffset >= mostRecent[0]) {
+				mostRecent = [anchoredOffset, btn];
+			}
+		}
+	}
+
+	if (mostRecent) {
+		const [_, btn] = mostRecent;
 		if (lastMostRecentNavPoint) {
 			lastMostRecentNavPoint.autofocus = false;
 			lastMostRecentNavPoint.disabled = false;
@@ -168,8 +186,9 @@ export function mostRecentNavPoint(
 		btn.autofocus = true;
 		btn.disabled = true;
 		lastMostRecentNavPoint = btn;
+		return btn;
 	}
-	return btn;
+	return null;
 }
 
 export function showToc(): void {

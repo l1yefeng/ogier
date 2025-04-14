@@ -16,39 +16,40 @@ export class Styler {
 		this.#readerRoot.adoptedStyleSheets = [this.#inPageStylesheet, this.#customStylesheet];
 	}
 
-	// TODO (optimize) parallellize
-	async load(paths: string[]): Promise<void> {
-		const stylesheets = [];
-
-		for (const path of paths) {
-			if (this.#linkedStylesheets[path]) {
-				stylesheets.push(this.#linkedStylesheets[path]);
-				continue;
-			}
-
-			let css: string;
-			try {
-				css = await rs.getResource(path);
-				console.debug(`loaded stylesheet ${path}: `, css);
-			} catch (err) {
-				console.error(`Error loading stylesheet ${path}:`, err);
-				continue;
-			}
-			if (!css) {
-				console.error(`Resource not found: ${path}`);
-				continue;
-			}
-			const stylesheet = new CSSStyleSheet();
-			stylesheet.replace(css);
-			this.#linkedStylesheets[path] = stylesheet;
-			stylesheets.push(stylesheet);
-		}
-
+	load(paths: string[]): Promise<void> {
 		this.#readerRoot.adoptedStyleSheets.splice(
 			2,
 			this.#readerRoot.adoptedStyleSheets.length - 2,
-			...stylesheets,
 		);
+
+		const promises = paths.map(path =>
+			new Promise((resolve: (value: CSSStyleSheet) => void, reject) => {
+				if (this.#linkedStylesheets[path]) {
+					return resolve(this.#linkedStylesheets[path]);
+				}
+
+				rs.getResource(path).then(css => {
+					console.debug(`loaded stylesheet ${path}: `, css);
+					if (!css) {
+						return reject(`Resource not found: ${path}`);
+					}
+					const stylesheet = new CSSStyleSheet();
+					stylesheet.replace(css);
+					this.#linkedStylesheets[path] = stylesheet;
+					return resolve(stylesheet);
+				});
+			}).then(stylesheet => {
+				this.#readerRoot.adoptedStyleSheets.push(stylesheet);
+			}),
+		);
+
+		return Promise.allSettled(promises).then(results => {
+			for (const result of results) {
+				if (result.status == "rejected") {
+					console.error(`Failed to load css: ${result.reason}`);
+				}
+			}
+		});
 	}
 
 	setInPageStylesheet(css: string): void {

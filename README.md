@@ -7,10 +7,8 @@ Small and fast.
 - EPUB3
 - key events: keyup is sometimes accidental; KeyDown sometimes doesn't have focus
 - Improve performance when loading styles
-- Improve CSS parser
 - Store last read location: which line
 - Fetch font from archive
-- Read progress: which nav item?
 - Drap and drop file to open
 
 ## App persistent state
