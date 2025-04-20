@@ -1,4 +1,4 @@
-import { clamp, CustomStyleKey, CustomStyles } from "./base";
+import { clamp, CustomStyleKey, CustomStyles, FontPrefer } from "./base";
 import * as rs from "./invoke";
 
 export class Styler {
@@ -6,6 +6,9 @@ export class Styler {
 	#linkedStylesheets: Record<string, CSSStyleSheet>;
 	#customStylesheet: CSSStyleSheet;
 	#inPageStylesheet: CSSStyleSheet;
+
+	#fontPreference: FontPrefer = null;
+	#customStyles: CustomStyles | null = null;
 
 	constructor(readerRoot: ShadowRoot) {
 		this.#readerRoot = readerRoot;
@@ -53,31 +56,56 @@ export class Styler {
 	}
 
 	setInPageStylesheet(css: string): void {
-		this.#customStylesheet.replace(css);
+		this.#inPageStylesheet.replace(css);
 	}
 
-	setCustomStylesheet(styles: CustomStyles): void {
-		const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
-		const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
-		const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 500);
+	set fontPreference(value: FontPrefer) {
+		this.#fontPreference = value;
+		this.#setCustomStylesheet();
+	}
 
-		const baseFontSizeCss = baseFontSize.toFixed(2) + "px";
-		const lineHeightScaleCss = lineHeightScale.toFixed(3);
-		const hostLineHeightCss = (lineHeightScale * 1.25).toFixed(2);
-		const inlineMarginCss = `${(inlineMargin / 2).toFixed(2)}rem`;
+	set customStyles(value: CustomStyles) {
+		this.#customStyles = value;
+		this.#setCustomStylesheet();
+	}
 
-		const host = this.#readerRoot.host as HTMLElement;
-		host.style.paddingInline = inlineMarginCss;
-		const hostStyle = `
+	#setCustomStylesheet(): void {
+		let hostStyle = `
+            img {
+                max-width: 100%;
+            }
+		`;
+		if (this.#customStyles) {
+			const styles = this.#customStyles;
+			const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
+			const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
+			const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 500);
+
+			const baseFontSizeCss = baseFontSize.toFixed(2) + "px";
+			const lineHeightScaleCss = lineHeightScale.toFixed(3);
+			const hostLineHeightCss = (lineHeightScale * 1.25).toFixed(2);
+			const inlineMarginCss = `${(inlineMargin / 2).toFixed(2)}rem`;
+
+			const host = this.#readerRoot.host as HTMLElement;
+			host.style.paddingInline = inlineMarginCss;
+
+			hostStyle += `
             :host {
                 --og-line-height-scale: ${lineHeightScaleCss};
                 font-size: ${baseFontSizeCss};
                 line-height: ${hostLineHeightCss};
             }
-            img {
-                max-width: 100%;
-            }
-        `;
+			`;
+		}
+
+		if (this.#fontPreference) {
+			hostStyle += `
+			:host {
+				font-family: ${this.#fontPreference};
+			}
+			`;
+		}
+
 		this.#customStylesheet.replaceSync(hostStyle);
 	}
 }

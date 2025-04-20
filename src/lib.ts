@@ -8,6 +8,7 @@ import {
 	CustomStyles,
 	EpubDetails,
 	EpubNavPoint,
+	FontPrefer,
 	isLocationNear,
 	markSessionInProgress,
 	repairEpubHref,
@@ -138,7 +139,7 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 		console.error("Error loading saved custom styles:", err);
 		customStyles = {};
 	}
-	const localStylesCommit = (styles: CustomStyles) => styler!.setCustomStylesheet(styles);
+	const localStylesCommit = (styles: CustomStyles) => (styler!.customStyles = styles);
 	commitCustomStylesFromSaved(customStyles, localStylesCommit);
 	activateCustomizationInput(localStylesCommit, rs.setCustomStyles);
 
@@ -320,7 +321,7 @@ async function initDetails(): Promise<void> {
 	refreshUiWithBookDetails(details);
 	createBookDetailsUi(details);
 
-	getCurrentWebviewWindow().listen("menu/file::details", showDetails);
+	getCurrentWebviewWindow().listen("menu/f_d", showDetails);
 }
 
 async function initToc(): Promise<void> {
@@ -335,7 +336,7 @@ async function initToc(): Promise<void> {
 	}
 	createTocUi(result, navigateTo);
 
-	getCurrentWebviewWindow().listen("menu/file::table-of-contents", showToc);
+	getCurrentWebviewWindow().listen("menu/f_toc", showToc);
 }
 
 export async function initReaderFrame(spineItem: SpineItemData): Promise<void> {
@@ -347,11 +348,15 @@ export async function initReaderFrame(spineItem: SpineItemData): Promise<void> {
 	readerShadowRoot = elemReaderHost!.attachShadow({ mode: "open" });
 	styler = new Styler(readerShadowRoot);
 	// setup reader event listeners
-	document.body.addEventListener("keyup", handleKeyEvent);
+	document.body.addEventListener("keydown", handleKeyEvent);
 	readerShadowRoot.addEventListener("click", event =>
 		handleClickInReader(event as PointerEvent),
 	);
 	elemTocButton!.addEventListener("click", showToc);
+
+	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", event => {
+		styler!.fontPreference = event.payload;
+	});
 
 	renderBookPage(spineItem, 0);
 }

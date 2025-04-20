@@ -5,7 +5,8 @@ Small and fast.
 ## TODO
 
 - EPUB3
-- key events: keyup is sometimes accidental; KeyDown sometimes doesn't have focus
+- KeyDown sometimes doesn't have focus
+- Use keyup and repeat. Make repeat count the distance to jump.
 - Improve performance when loading styles
 - Store last read location: which line
 - Fetch font from archive
@@ -16,17 +17,18 @@ Small and fast.
 prefs.json
 
 ```ts
-type FontName = string;
+type FontName = string
 
-interface NoLangPrefs {
-    fontPrefer: "sans-serif" | "serif";
-    fontFallbacks: Record<FontName, FontName[]>;
-}
-
+type PrefKey = "font.prefer" | ["font.fallbacks", FontName]
 type Lang = "[zh-Hans]" | "[en]" | ...
-type PrefLang = "default" | Lang
+type Key = PrefKey | [Lang, PrefKey]
 
-type Prefs = Record<PrefLang, NoLangPrefs>
+// font.prefer
+type Value = "sans-serif" | "serif"
+// font.fallbacks
+type Value = FontName[]
+
+type Prefs = Record<Key, Value>
 ```
 
 *epub-id*.json
@@ -34,8 +36,10 @@ type Prefs = Record<PrefLang, NoLangPrefs>
 ```ts
 interface PerEpubCustomization {
     baseFontSize: number;
-    spacingScale: number;
+    lineHeightScale: number;
+    inlineMargin: number;
     forceLang: Lang;
+    forceFont: boolean;
 }
 ```
 
