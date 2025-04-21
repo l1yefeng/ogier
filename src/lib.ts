@@ -340,19 +340,22 @@ async function initToc(): Promise<void> {
 }
 
 export async function initReaderFrame(spineItem: SpineItemData): Promise<void> {
+	// TODO: don't duplicate
 	initToc();
 	initDetails();
 
 	// show reader
 	elemFrame!.style.display = ""; // use display value in css
-	readerShadowRoot = elemReaderHost!.attachShadow({ mode: "open" });
+	if (readerShadowRoot == null) {
+		readerShadowRoot = elemReaderHost!.attachShadow({ mode: "open" });
+	}
 	styler = new Styler(readerShadowRoot);
 	// setup reader event listeners
-	document.body.addEventListener("keydown", handleKeyEvent);
+	document.body.onkeydown = handleKeyEvent;
 	readerShadowRoot.addEventListener("click", event =>
 		handleClickInReader(event as PointerEvent),
 	);
-	elemTocButton!.addEventListener("click", showToc);
+	elemTocButton!.onclick = showToc;
 
 	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", event => {
 		styler!.fontPreference = event.payload;

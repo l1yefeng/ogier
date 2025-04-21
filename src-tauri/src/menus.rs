@@ -59,7 +59,7 @@ pub mod file {
             .build()
     }
 
-    pub fn update<R>(app: &tauri::AppHandle<R>, submenu: &Submenu<R>) -> tauri::Result<()>
+    pub fn update<R>(window: &tauri::Window<R>, submenu: &Submenu<R>) -> tauri::Result<()>
     where
         R: tauri::Runtime,
     {
@@ -67,18 +67,18 @@ pub mod file {
             &[
                 &MenuItemBuilder::new(open_in_new_window::TEXT)
                     .id(open_in_new_window::ID)
-                    .build(app)?,
-                &PredefinedMenuItem::separator(app)?,
+                    .build(window)?,
+                &PredefinedMenuItem::separator(window)?,
                 &MenuItemBuilder::new(show_in_folder::TEXT)
                     .id(show_in_folder::ID)
-                    .build(app)?,
+                    .build(window)?,
                 &MenuItemBuilder::new(details::TEXT)
                     .id(details::ID)
-                    .build(app)?,
+                    .build(window)?,
                 &MenuItemBuilder::new(table_of_contents::TEXT)
                     .id(table_of_contents::ID)
-                    .build(app)?,
-                &PredefinedMenuItem::separator(app)?,
+                    .build(window)?,
+                &PredefinedMenuItem::separator(window)?,
             ],
             1,
         )
@@ -208,13 +208,13 @@ pub mod view {
         }
     }
 
-    pub fn make<R>(app: &tauri::AppHandle<R>) -> tauri::Result<Submenu<R>>
+    pub fn make<R>(window: &tauri::Window<R>) -> tauri::Result<Submenu<R>>
     where
         R: tauri::Runtime,
     {
-        SubmenuBuilder::new(app, TEXT)
+        SubmenuBuilder::new(window, TEXT)
             .id(ID)
-            .item(&font_preference::make(app)?)
+            .item(&font_preference::make(window)?)
             .text(open_custom_styles::ID, open_custom_styles::TEXT)
             .build()
     }
@@ -277,9 +277,8 @@ pub mod help {
 
 pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
     match id {
-        file::open::ID => Ok(()),
         file::open_in_new_window::ID => Ok(()),
-        file::show_in_folder::ID => file::show_in_folder::handle(app),
+        file::open::ID | file::show_in_folder::ID => file::show_in_folder::handle(app),
         file::details::ID | file::table_of_contents::ID => handle_by_emit_event(app, id),
 
         view::font_preference::sans_serif::ID | view::font_preference::serif::ID => {
@@ -305,18 +304,21 @@ where
     Ok(menu)
 }
 
-pub fn update<R>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>>
+pub fn update<R>(window: &tauri::Window<R>) -> tauri::Result<Menu<R>>
 where
     R: tauri::Runtime,
 {
-    let menu = app.menu().unwrap();
+    let menu = window.menu().unwrap();
+    if menu.get(view::ID).is_some() {
+        return Ok(menu);
+    }
 
     // File
     let file_submenu = menu.get(file::ID).unwrap();
-    file::update(app, file_submenu.as_submenu_unchecked())?;
+    file::update(window, file_submenu.as_submenu_unchecked())?;
 
     // View
-    let view_submenu = view::make(app)?;
+    let view_submenu = view::make(window)?;
     menu.insert(&view_submenu, 1)?;
 
     Ok(menu)

@@ -2,9 +2,27 @@
  * The entry file, imported in HTML directly.
  */
 
+import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
 import { takeSessionInProgress } from "./base";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
+
+async function chooseFileAndOpen(): Promise<void> {
+	const path = await open({
+		directory: false,
+		filters: [
+			{
+				name: "EPUB",
+				extensions: ["epub"],
+			},
+		],
+	});
+	if (path) {
+		const spineItem = await rs.openEpub(path);
+		await initReaderFrame(spineItem);
+	}
+}
 
 document.addEventListener("DOMContentLoaded", () => {
 	loadContent();
@@ -14,25 +32,15 @@ document.addEventListener("DOMContentLoaded", () => {
 	const enableClickToOpen = () => {
 		elemClickToOpen.style.visibility = "";
 		elemClickToOpen.onclick = () => {
-			rs.openEpub()
-				.then(spineItem => {
-					if (spineItem) {
-						// got the book.
-						elemClickToOpen.remove();
-						initReaderFrame(spineItem);
-					}
-					// if null, user has not opened one
-				})
-				.catch(err => {
-					window.alert(err);
-				});
+			chooseFileAndOpen().catch(err => {
+				window.alert(err);
+			});
 		};
 	};
 
 	if (takeSessionInProgress()) {
 		rs.reloadCurrent()
 			.then(spineItem => {
-				elemClickToOpen.remove();
 				return initReaderFrame(spineItem);
 			})
 			.catch(err => {
@@ -42,4 +50,37 @@ document.addEventListener("DOMContentLoaded", () => {
 	} else {
 		enableClickToOpen();
 	}
+
+	getCurrentWindow().listen<{
+		paths: string[];
+		position: PhysicalPosition;
+	}>("tauri://drag-drop", event => {
+		console.debug(event);
+		const paths = event.payload.paths;
+		if (paths.length == 0) {
+		} else if (paths.length > 1) {
+			window.alert("One at a time.");
+		} else {
+			const path = paths[0];
+			const parts = path.split(".");
+			if (parts[parts.length - 1].toLowerCase() != "epub") {
+				window.alert("EPUB only");
+			} else {
+				// Proceed
+				rs.openEpub(path)
+					.then(spineItem => {
+						return initReaderFrame(spineItem);
+					})
+					.catch(err => {
+						window.alert(err);
+					});
+			}
+		}
+	});
+
+	getCurrentWindow().listen("menu/f_o", () => {
+		chooseFileAndOpen().catch(err => {
+			window.alert(err);
+		});
+	});
 });

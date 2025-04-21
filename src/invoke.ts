@@ -56,8 +56,9 @@ export function setCustomStyles(styles: CustomStyles): Promise<void> {
 	return invoke("set_custom_stylesheet", args);
 }
 
-export function openEpub(): Promise<SpineItemData | null> {
-	return invoke("open_epub");
+export function openEpub(path: string): Promise<SpineItemData> {
+	const args = { path };
+	return invoke("open_epub", args);
 }
 
 // TODO: Rename the API

@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint};
-use tauri_plugin_dialog::{DialogExt, FilePath};
+use tauri::{Manager, State, Window};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
@@ -105,14 +105,14 @@ fn book_find_nav_doc(state: &tauri::State<AppState>) -> Option<(PathBuf, String)
     })
 }
 
-fn book_save_progress(app: tauri::AppHandle, state: &tauri::State<AppState>) -> CmdResult<()> {
+fn book_save_progress(window: &Window, state: &State<AppState>) -> CmdResult<()> {
     let state = state.lock().unwrap();
     let book = state.book.as_ref().unwrap();
     let chapter_num = book.get_current_page();
     let book_hash = &state.book_hash;
 
     // Save progress to the store
-    let progress = app.store(PROGRESS_STORE)?;
+    let progress = window.store(PROGRESS_STORE)?;
     progress.set(book_hash.as_str(), chapter_num);
     Ok(())
 }
@@ -209,15 +209,15 @@ fn get_toc(state: tauri::State<AppState>) -> CmdResult<EpubToc> {
 
 #[tauri::command]
 fn navigate_adjacent(
-    app: tauri::AppHandle,
-    state: tauri::State<AppState>,
+    window: Window,
+    state: State<AppState>,
     next: bool,
 ) -> CmdResult<Option<SpineItem>> {
     if !book_navigate(&state, Navigation::Adjacent(next))? {
         // Not an error. Just means there is no next/prev page.
         return Ok(None);
     }
-    book_save_progress(app, &state)?;
+    book_save_progress(&window, &state)?;
     book_get_current(&state).map(Some)
 }
 
@@ -227,11 +227,7 @@ fn reload_current(state: tauri::State<AppState>) -> CmdResult<SpineItem> {
 }
 
 #[tauri::command]
-fn navigate_to(
-    app: tauri::AppHandle,
-    state: tauri::State<AppState>,
-    path: String,
-) -> CmdResult<SpineItem> {
+fn navigate_to(window: Window, state: State<AppState>, path: String) -> CmdResult<SpineItem> {
     let Some(position) = ({
         let state = state.lock().unwrap();
         let book = state.book.as_ref().unwrap();
@@ -243,7 +239,7 @@ fn navigate_to(
     if !book_navigate(&state, Navigation::Position(position))? {
         return Err(Error::Epub(DocError::InvalidEpub));
     }
-    book_save_progress(app, &state)?;
+    book_save_progress(&window, &state)?;
     book_get_current(&state)
 }
 
@@ -327,23 +323,12 @@ fn set_custom_stylesheet(
 
 #[tauri::command]
 fn open_epub(
-    app: tauri::AppHandle,
     state: tauri::State<AppState>,
     window: tauri::Window,
-) -> CmdResult<Option<SpineItem>> {
-    let Some(filepath) = app
-        .dialog()
-        .file()
-        .add_filter("EPUB", &["epub"])
-        .blocking_pick_file()
-    else {
-        return Ok(None); // file picking was cancelled
-    };
-    let FilePath::Path(filepath) = filepath else {
-        return Ok(None); // TODO unimplemented
-    };
+    path: PathBuf,
+) -> CmdResult<SpineItem> {
     // open file
-    let book = EpubDoc::new(&filepath)?;
+    let book = EpubDoc::new(&path)?;
     // TODO(optimize) async
     if let Some(title) = book.mdata("title") {
         window.set_title(&title.to_string()).unwrap_or_else(|err| {
@@ -351,9 +336,9 @@ fn open_epub(
         });
     }
 
-    let book_hash = compute_book_hash(&filepath)?;
+    let book_hash = compute_book_hash(&path)?;
     {
-        let file_metadata = std::fs::metadata(&filepath)?;
+        let file_metadata = std::fs::metadata(&path)?;
 
         let as_ms = |time: SystemTime| {
             time.duration_since(UNIX_EPOCH)
@@ -365,26 +350,27 @@ fn open_epub(
         state.book = Some(book);
         state.book_hash = book_hash;
 
-        state.book_file_info.path = filepath.clone();
+        state.book_file_info.path = path.clone();
         state.book_file_info.size = file_metadata.len();
         state.book_file_info.created = file_metadata.created().map(as_ms).unwrap_or_default();
         state.book_file_info.modified = file_metadata.modified().map(as_ms).unwrap_or_default();
     }
 
     // retrieve progress. this happens only once
-    let progress = app.store(PROGRESS_STORE)?;
+    let progress = window.store(PROGRESS_STORE)?;
 
     if let Some(serde_json::Value::Number(num)) = progress.get(book_hash) {
         // use read progress
         if let Some(chapter_num) = num.as_u64() {
+            let state = window.state::<AppState>();
             let _changed = book_navigate(&state, Navigation::Position(chapter_num as usize))?;
         }
     }
 
-    let menu = menus::update(&app)?;
+    let menu = menus::update(&window)?;
 
     // retrieve app preferences.
-    let prefs = app.store(PREFS_STORE)?;
+    let prefs = window.store(PREFS_STORE)?;
 
     menus::view::font_preference::set(
         &menu
@@ -408,8 +394,8 @@ fn open_epub(
         },
     )?;
 
-    book_save_progress(app, &state)?;
-    book_get_current(&state).map(Some)
+    book_save_progress(&window, &state)?;
+    book_get_current(&state)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

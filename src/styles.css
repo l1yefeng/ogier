@@ -4,6 +4,7 @@
 	--color-active-control-outline: #74bcfc;
 	--color-active-item-text: #1469b3;
 	--color-warning-text: brown;
+	--color-reader-bg: white;
 
 	font-family: var(--font);
 }
@@ -28,7 +29,10 @@
 #og-frame {
 	display: flex;
 	height: 100vh;
+	position: absolute;
+	top: 0;
 	flex-direction: column;
+	background-color: var(--color-reader-bg);
 }
 
 #og-reader-host {
