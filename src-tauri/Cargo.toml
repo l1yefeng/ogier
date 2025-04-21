@@ -21,7 +21,7 @@ tauri-build = { version = "2", features = [] }
 arrayvec = "0.7.6"
 base64 = "0.22.1"
 cssparser = "0.35.0"
-epub = { git = "https://github.com/l1yefeng/epub-rs", rev = "7b23f2067d545a19acfd79c498231f3c8b9f01a5" }
+epub = { git = "https://github.com/danigm/epub-rs", rev = "429b5c6170c4d8fd343953b2b651b03c4b36c666" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }

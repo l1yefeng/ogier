@@ -1,6 +1,8 @@
 use arrayvec::ArrayString;
 use cssparser::{ParseError, Parser, ParserInput, ToCss, Token};
 
+use crate::prefs::FontSubstitute;
+
 fn abs_length_in_rem(value: f32, unit: &str) -> Option<f32> {
     const BASE_FONT_SIZE: f32 = 16.0;
     match unit {
@@ -60,6 +62,8 @@ fn transform_css<'i>(
     parser: &mut Parser<'i, '_>,
     output: &mut String,
     mut expect_line_height: bool,
+    mut expect_font_family: bool,
+    font_substitute: &FontSubstitute,
 ) -> Result<(), ParseError<'i, ()>> {
     while let Ok(token) = parser.next_including_whitespace() {
         match token {
@@ -67,10 +71,15 @@ fn transform_css<'i>(
                 output.push(';');
                 // don't expect forever
                 expect_line_height = false;
+                expect_font_family = false;
             }
             Token::Ident(ident) if ident.eq_ignore_ascii_case("line-height") => {
                 output.push_str("line-height");
                 expect_line_height = true;
+            }
+            Token::Ident(ident) if ident.eq_ignore_ascii_case("font-family") => {
+                output.push_str("font-family");
+                expect_font_family = true;
             }
             Token::Dimension { int_value, .. } if int_value.is_some_and(|i| i == 0) => {
                 output.push('0');
@@ -101,6 +110,14 @@ fn transform_css<'i>(
                 };
                 output.push_str(&s);
             }
+            // font family
+            Token::Ident(value) | Token::QuotedString(value) if expect_font_family => {
+                if let Some(subs) = font_substitute.get(&value.to_string()) {
+                    output.push_str(subs);
+                } else {
+                    output.push_str(&token.to_css_string());
+                }
+            }
             Token::Ident(ident) => {
                 let s = match sml_in_rem(ident) {
                     Some(rem) => format!("{rem:.2}rem"),
@@ -118,7 +135,13 @@ fn transform_css<'i>(
         };
         if let Some(close) = close {
             parser.parse_nested_block(|parser_nested| {
-                transform_css(parser_nested, output, expect_line_height)
+                transform_css(
+                    parser_nested,
+                    output,
+                    expect_line_height,
+                    expect_font_family,
+                    font_substitute,
+                )
             })?;
             output.push(close);
         }
@@ -126,14 +149,14 @@ fn transform_css<'i>(
     Ok(())
 }
 
-pub fn regulate_css(css: &str) -> Option<String> {
+pub fn regulate_css(css: &str, font_substitute: &FontSubstitute) -> Option<String> {
     println!("Regulating CSS: {}", css);
     let mut output = String::new();
 
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
 
-    if let Err(_) = transform_css(&mut parser, &mut output, false) {
+    if let Err(_) = transform_css(&mut parser, &mut output, false, false, font_substitute) {
         return None;
     }
 
@@ -142,6 +165,8 @@ pub fn regulate_css(css: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::regulate_css;
 
     #[test]
@@ -149,13 +174,13 @@ mod tests {
         let input =
             "body { font-size: 16px; margin: 32px; } p { padding: 8px; } a { font-size: medium; }";
         let expected = "body { font-size: 1.00rem; margin: 2.00rem; } p { padding: 0.50rem; } a { font-size: 1.00rem; }";
-        assert_eq!(regulate_css(input).unwrap(), expected);
+        assert_eq!(regulate_css(input, &HashMap::new()).unwrap(), expected);
     }
 
     #[test]
     fn test_regulate_css_nesting() {
         let input = "body { color: green; p { color: red; a { color: blue } } }";
         let expected = "body { color: green; p { color: red; a { color: blue } } }";
-        assert_eq!(regulate_css(input).unwrap(), expected);
+        assert_eq!(regulate_css(input, &HashMap::new()).unwrap(), expected);
     }
 }

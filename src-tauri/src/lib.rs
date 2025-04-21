@@ -4,6 +4,7 @@ mod menus;
 mod mepub;
 mod prefs;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufReader, Read};
@@ -21,7 +22,7 @@ use twox_hash::XxHash64;
 use css::regulate_css;
 use error::Error;
 use mepub::{EpubDetails, EpubFileInfo, EpubToc, MyNavPoint, Navigation, SpineItem};
-use prefs::FontPrefer;
+use prefs::{FontPrefer, FontSubstitute};
 
 type Epub = EpubDoc<BufReader<File>>;
 type EpubHash = arrayvec::ArrayString<16>;
@@ -32,6 +33,7 @@ struct AppData {
     book: Option<Epub>,
     book_hash: EpubHash,
     book_file_info: EpubFileInfo,
+    prefs_font_substitute: FontSubstitute,
 }
 
 impl AppData {
@@ -45,6 +47,7 @@ impl AppData {
                 created: 0,
                 modified: 0,
             },
+            prefs_font_substitute: HashMap::new(),
         }
     }
 }
@@ -147,7 +150,7 @@ fn resource_base64_encoded(content: Vec<u8>, mime: String) -> String {
 }
 
 #[tauri::command]
-fn get_resource(state: tauri::State<AppState>, path: String) -> CmdResult<String> {
+fn get_resource(state: tauri::State<AppState>, path: PathBuf) -> CmdResult<String> {
     let (content, mime) = {
         let mut state = state.lock().unwrap();
         let book = state.book.as_mut().unwrap();
@@ -164,8 +167,13 @@ fn get_resource(state: tauri::State<AppState>, path: String) -> CmdResult<String
         Ok(resource_base64_encoded(content, mime))
     } else if mime.starts_with("text/") {
         let content = String::from_utf8(content)?;
-        if path.ends_with(".css") {
-            Ok(regulate_css(&content).unwrap_or(content))
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("css"))
+        {
+            let state = state.lock().unwrap();
+            let font_substitute = &state.prefs_font_substitute;
+            Ok(regulate_css(&content, font_substitute).unwrap_or(content))
         } else {
             Ok(content)
         }
@@ -372,6 +380,27 @@ fn open_epub(
     // retrieve app preferences.
     let prefs = window.store(PREFS_STORE)?;
 
+    // prefs - font.substitute
+    {
+        let mut state = state.lock().unwrap();
+        state.prefs_font_substitute.clear();
+    }
+    if let Some(value) = prefs.get("font.substitute") {
+        let serde_json::Value::Object(value) = value else {
+            return Err(error::Error::InvalidPrefs);
+        };
+        let mut state = state.lock().unwrap();
+        for (font, subs) in value.iter() {
+            let serde_json::Value::String(subs) = subs else {
+                return Err(error::Error::InvalidPrefs);
+            };
+            state
+                .prefs_font_substitute
+                .insert(font.clone(), subs.clone());
+        }
+    }
+
+    // prefs - font.prefer
     menus::view::font_preference::set(
         &menu
             .get(menus::view::ID)

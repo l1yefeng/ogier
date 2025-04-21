@@ -48,6 +48,21 @@ pub mod file {
         pub const TEXT: &str = "Table of contents";
     }
 
+    pub mod open_preference_file {
+        use tauri_plugin_opener::OpenerExt;
+        use tauri_plugin_store::resolve_store_path;
+
+        pub const ID: &str = "f_opf";
+        pub const TEXT: &str = "Open preference file";
+
+        pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
+            let path = resolve_store_path(app, crate::PREFS_STORE).map_err(|e| e.to_string())?;
+            app.opener()
+                .open_path(path.to_string_lossy(), None::<&str>)
+                .map_err(|e| e.to_string())
+        }
+    }
+
     pub fn make<R>(app: &tauri::AppHandle<R>) -> tauri::Result<Submenu<R>>
     where
         R: tauri::Runtime,
@@ -55,6 +70,7 @@ pub mod file {
         SubmenuBuilder::new(app, TEXT)
             .id(ID)
             .text(open::ID, open::TEXT)
+            .text(open_preference_file::ID, open_preference_file::TEXT)
             .quit()
             .build()
     }
@@ -280,6 +296,7 @@ pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) -> Result<(), String>
         file::open_in_new_window::ID => Ok(()),
         file::open::ID | file::show_in_folder::ID => file::show_in_folder::handle(app),
         file::details::ID | file::table_of_contents::ID => handle_by_emit_event(app, id),
+        file::open_preference_file::ID => file::open_preference_file::handle(app),
 
         view::font_preference::sans_serif::ID | view::font_preference::serif::ID => {
             view::font_preference::handle(app, id)
