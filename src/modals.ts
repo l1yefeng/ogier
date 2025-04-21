@@ -2,7 +2,7 @@
  * Parts of the UI that compose the details modal, TOC modal, and note preview modal.
  */
 
-import { EpubDetails, EpubNavPoint } from "./base";
+import { EpubDetails, EpubNavPoint, EpubToc } from "./base";
 
 let elemDetailsModal: HTMLDialogElement | null;
 let elemBookDetailsTable: HTMLTableElement | null;
@@ -105,13 +105,14 @@ function createDetailsTableRow(prop: string, value: string | string[]): HTMLTabl
 }
 
 export function showDetails(): void {
+	closeAllModals();
 	elemDetailsModal!.showModal();
 }
 
 // Toc
 //
 
-function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
+function createNavPointNcx(navPoint: EpubNavPoint): HTMLLIElement {
 	const elemNavPoint = document.createElement("li");
 
 	const elemNavBtn = document.createElement("button");
@@ -125,21 +126,80 @@ function createNavPoint(navPoint: EpubNavPoint): HTMLLIElement {
 
 	if (navPoint.children.length > 0) {
 		const sub = document.createElement("ol");
-		sub.append(...navPoint.children.map(createNavPoint));
+		sub.append(...navPoint.children.map(createNavPointNcx));
 		elemNavPoint.appendChild(sub);
 	}
 
 	return elemNavPoint;
 }
 
+function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
+	for (const child of ol.children) {
+		if (child instanceof HTMLLIElement) {
+			const label = document.createElement("button");
+			label.textContent = "--";
+			label.disabled = true;
+			let ol: HTMLOListElement | null = null;
+			for (const grandChild of child.children) {
+				if (grandChild instanceof HTMLSpanElement) {
+					label.replaceChildren(...grandChild.childNodes);
+					label.disabled = true;
+					label.value = "";
+				} else if (grandChild instanceof HTMLAnchorElement) {
+					label.replaceChildren(...grandChild.childNodes);
+					label.disabled = false;
+					// relative path
+					let href = grandChild.getAttribute("href") ?? "";
+					if (!href.startsWith("/")) {
+						const parts = navDocPath.split("/");
+						parts.splice(parts.length - 1, 1, href);
+						href = parts.join("/");
+					}
+					label.value = href;
+					const [path, locationId] = href.split("#", 2);
+					label.dataset.path = path;
+					label.dataset.locationId = locationId ?? "";
+				} else if (grandChild instanceof HTMLOListElement) {
+					ol = grandChild;
+					remakeNavPoints(ol, navDocPath);
+				}
+			}
+			child.replaceChildren();
+			child.appendChild(label);
+			if (ol) {
+				child.appendChild(ol);
+			}
+		} else {
+			child.remove();
+		}
+	}
+}
+
 export function createTocUi(
-	navRoot: EpubNavPoint,
+	toc: EpubToc,
 	navigateTo: (path: string, locationId?: string) => Promise<void>,
 ): void {
-	const ol = document.createElement("ol");
-	elemTocNav!.replaceChildren(ol);
+	let heading = document.createElement("h1");
+	let ol: HTMLOListElement;
+	if (toc.kind == "ncx") {
+		heading.textContent = "Table of Contents";
+		ol = document.createElement("ol");
+		ol.append(...toc.root.children.map(createNavPointNcx));
+	} else {
+		const { nav, path } = toc;
+		const originalHeading = [...nav.children].find(
+			child => child instanceof HTMLHeadingElement,
+		);
+		if (originalHeading) {
+			heading.append(...originalHeading.childNodes);
+		} else {
+			heading.textContent = "Table of Contents";
+		}
+		ol = [...nav.children].find(child => child instanceof HTMLOListElement)!;
+		remakeNavPoints(ol, path);
+	}
 
-	ol.append(...navRoot.children.map(createNavPoint));
+	elemTocNav!.replaceChildren(heading, ol);
 
 	elemTocModal!.addEventListener("close", async () => {
 		const value = elemTocModal!.returnValue;
@@ -192,6 +252,7 @@ export function mostRecentNavPoint(
 }
 
 export function showToc(): void {
+	closeAllModals();
 	elemTocModal!.showModal();
 	lastMostRecentNavPoint?.scrollIntoView();
 }
@@ -200,6 +261,13 @@ export function showToc(): void {
 //
 
 export function showNotePreview(floatingContentRoot: HTMLElement): void {
+	closeAllModals();
 	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
 	elemPreviewModal!.showModal();
+}
+
+function closeAllModals(): void {
+	elemTocModal!.close();
+	elemDetailsModal!.close();
+	elemPreviewModal!.close();
 }

@@ -1,191 +1,199 @@
 :root {
-    --font: system-ui;
-    --color-active-control-background: #e5f3ff;
-    --color-active-control-outline: #74bcfc;
-    --color-active-item-text: #1469b3;
-    --color-warning-text: brown;
+	--font: system-ui;
+	--color-active-control-background: #e5f3ff;
+	--color-active-control-outline: #74bcfc;
+	--color-active-item-text: #1469b3;
+	--color-warning-text: brown;
 
-    font-family: var(--font);
+	font-family: var(--font);
 }
 
 #og-body {
-    margin: 0;
+	margin: 0;
 }
 
 /* Click to open / Welcome */
 
 #og-click-to-open {
-    display: flex;
-    height: 100vh;
+	display: flex;
+	height: 100vh;
 
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    cursor: pointer;
-    user-select: none;
+	align-items: center;
+	justify-content: center;
+	font-size: 2rem;
+	cursor: pointer;
+	user-select: none;
 }
 
 #og-frame {
-    display: flex;
-    height: 100vh;
-    flex-direction: column;
+	display: flex;
+	height: 100vh;
+	flex-direction: column;
 }
 
 #og-reader-host {
-    flex: 1;
-    overflow-y: auto;
+	flex: 1;
+	overflow-y: auto;
 }
 
 /* Footer */
 
 #og-footer {
-    font-size: 0.8rem;
-    cursor: default;
-    padding: 0.2rem 0.5ch;
-    display: flex;
-    user-select: none;
+	font-size: 0.8rem;
+	cursor: default;
+	padding: 0.2rem 0.5ch;
+	display: flex;
+	user-select: none;
 
+	#og-spine-position {
+		margin-inline: auto;
+		align-self: center;
+	}
 
-    #og-spine-position {
-        margin-inline: auto;
-        align-self: center;
-    }
+	#og-toc-button-label {
+		margin-inline-start: 2px;
+	}
 
-    #og-toc-button-label {
-        margin-inline-start: 2px;
-    }
+	.og-starting-icon {
+		display: inline-block;
 
-    .og-starting-icon {
-        display: inline-block;
+		img {
+			vertical-align: text-bottom;
+			height: 1.25em;
+		}
+	}
 
-        img {
-            vertical-align: text-bottom;
-            height: 1.25em;
-        }
-    }
+	label.og-starting-icon {
+		border: 1px solid gray;
+		border-style: inset;
+		padding-inline-start: 2px;
 
-    label.og-starting-icon {
-        border: 1px solid gray;
-        border-style: inset;
-        padding-inline-start: 2px;
+		/* Add a space between adjacent <label>s */
+		& + label.og-starting-icon {
+			margin-inline-start: 2px;
+		}
 
-        /* Add a space between adjacent <label>s */
-        & + label.og-starting-icon {
-            margin-inline-start: 2px;
-        }
+		&:has(input:focus) {
+			background-color: var(--color-active-control-background);
+			outline: 1px solid gray;
+		}
 
-        &:has(input:focus) {
-            background-color: var(--color-active-control-background);
-            outline: 1px solid gray;
-        }
+		input {
+			width: 6ch;
 
-        input {
-            width: 6ch;
+			border: none;
+			&:focus {
+				outline: none;
+				background: inherit;
+			}
+		}
+	}
 
-            border: none;
-            &:focus {
-                outline: none;
-                background: inherit
-            }
-        }
-    }
+	button {
+		border: none;
+		background: none;
 
-    button {
-        border: none;
-        background: none;
+		&:hover {
+			background-color: var(--color-active-control-background);
+			outline: 1px solid var(--color-active-control-outline);
+		}
+	}
 
-        &:hover {
-            background-color: var(--color-active-control-background);
-            outline: 1px solid var(--color-active-control-outline);
-        }
-    }
-
-    button, input {
-        font-family: var(--font);
-        font-size: inherit;
-    }
+	button,
+	input {
+		font-family: var(--font);
+		font-size: inherit;
+	}
 }
 
 /* TOC modal */
 
 #og-toc-nav {
-    ol {
-        /* Remove the numbers */
-        list-style: none;
+	h1 {
+		/* The TOC heading should not stand out */
+		margin-block: 0;
+		font-size: 0.9em;
+		text-align: center;
+	}
 
-        &:first-child {
-            /* Remove the indentation of the root <ol> */
-            padding-inline-start: 0;
-        }
-    }
+	ol {
+		/* Remove the numbers */
+		list-style: none;
+	}
 
-    button {
-        /* Whole width clickable */
-        width: 100%;
+	& > ol {
+		/* Remove the indentation of the root <ol> */
+		padding-inline-start: 0;
+	}
 
-        border: none;
-        background: none;
+	button {
+		/* Whole width clickable */
+		width: 100%;
 
-        text-align: left;
+		border: none;
+		background: none;
 
-        &:hover {
-            background-color: var(--color-active-control-background);
-        }
+		text-align: left;
 
-        &:disabled {
-            color: var(--color-active-item-text);
-        }
-        &:disabled:hover {
-            background-color: inherit;
-        }
-    }
+		&:hover {
+			background-color: var(--color-active-control-background);
+		}
 
-    li:hover {
-        outline: 1px solid var(--color-active-control-outline);
-    }
+		&:disabled {
+			color: var(--color-active-item-text);
+		}
+		&:disabled:hover {
+			background-color: inherit;
+		}
+	}
+
+	li:hover {
+		outline: 1px solid var(--color-active-control-outline);
+	}
 }
 
 /* Details modal */
 
 #og-details-div {
-    display: flex;
-    flex-direction: row;
+	display: flex;
+	flex-direction: row;
 
-    figure {
-        img, h1 {
-            /* FIXME */
-            max-width: 30vw;
-            height: 20em;
-        }
+	figure {
+		img,
+		h1 {
+			/* FIXME */
+			max-width: 30vw;
+			height: 20em;
+		}
 
-        figcaption {
-            font-size: smaller;
-            color: var(--color-warning-text);
-        }
-    }
+		figcaption {
+			font-size: smaller;
+			color: var(--color-warning-text);
+		}
+	}
 
-    table {
-        th {
-            text-align: left;
-            vertical-align: initial;
-        }
-        td {
-            padding-inline-start: 1ch;
-            max-width: 40ch;
-            ol {
-                margin-block: 0;
-                padding-inline-start: 2ch;
-                list-style-type: lower-roman;
-            }
-        }
-    }
+	table {
+		th {
+			text-align: left;
+			vertical-align: initial;
+		}
+		td {
+			padding-inline-start: 1ch;
+			max-width: 40ch;
+			ol {
+				margin-block: 0;
+				padding-inline-start: 2ch;
+				list-style-type: lower-roman;
+			}
+		}
+	}
 }
 
 /* Preview modal */
 
 #og-preview-div {
-    .og-note-icon::before {
-        content: url(/src/assets/fluent/notebook_arrow_curve_down_20_regular.svg);
-        vertical-align: middle;
-    }
+	.og-note-icon::before {
+		content: url(/src/assets/fluent/notebook_arrow_curve_down_20_regular.svg);
+		vertical-align: middle;
+	}
 }

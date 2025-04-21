@@ -4,6 +4,12 @@ use std::path::PathBuf;
 use epub::doc::NavPoint;
 use serde::{Serialize, ser::SerializeStruct};
 
+#[derive(Serialize)]
+pub enum EpubToc {
+    Ncx { root: MyNavPoint },
+    Nav { path: PathBuf, xhtml: String },
+}
+
 pub struct MyNavPoint(pub NavPoint);
 
 impl Serialize for MyNavPoint {

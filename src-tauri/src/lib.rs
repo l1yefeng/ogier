@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
-use epub::doc::{DocError, EpubDoc, NavPoint};
+use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{StoreExt, resolve_store_path};
@@ -20,7 +20,7 @@ use twox_hash::XxHash64;
 
 use css::regulate_css;
 use error::Error;
-use mepub::{EpubDetails, EpubFileInfo, MyNavPoint, Navigation, SpineItem};
+use mepub::{EpubDetails, EpubFileInfo, EpubToc, MyNavPoint, Navigation, SpineItem};
 use prefs::FontPrefer;
 
 type Epub = EpubDoc<BufReader<File>>;
@@ -77,6 +77,31 @@ fn book_navigate(state: &tauri::State<AppState>, command: Navigation) -> CmdResu
         Navigation::Adjacent(true) => book.go_next(),
         Navigation::Adjacent(false) => book.go_prev(),
         Navigation::Position(n) => book.set_current_page(n),
+    })
+}
+
+fn book_find_nav_doc(state: &tauri::State<AppState>) -> Option<(PathBuf, String)> {
+    let mut state = state.lock().unwrap();
+    let book = state.book.as_mut().unwrap();
+    let resources: Vec<PathBuf> = book
+        .resources
+        .iter()
+        .filter_map(|kv| {
+            if kv.1.1 == "application/xhtml+xml" {
+                Some(kv.1.0.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    resources.into_iter().find_map(|path| {
+        let content = book.get_resource_str_by_path(&path)?;
+        const MARKER: &str = "epub:type=\"toc\"";
+        if content.contains(MARKER) {
+            Some((path, content))
+        } else {
+            None
+        }
     })
 }
 
@@ -151,24 +176,35 @@ fn get_resource(state: tauri::State<AppState>, path: String) -> CmdResult<String
 }
 
 #[tauri::command]
-fn get_toc(state: tauri::State<AppState>) -> CmdResult<MyNavPoint> {
-    let toc = {
+fn get_toc(state: tauri::State<AppState>) -> CmdResult<EpubToc> {
+    let (version, toc) = {
         let state = state.lock().unwrap();
         let book = state.book.as_ref().unwrap();
-        book.toc.clone()
+        // NOTE: this is the legacy NCX toc
+        (book.version.clone(), book.toc.clone())
     };
 
-    if toc.is_empty() {
-        Err(Error::EpubHasNoToc)
-        // TODO: Disable the menu item
-    } else {
-        Ok(MyNavPoint(NavPoint {
-            label: String::new(),
-            content: PathBuf::new(),
-            children: toc,
-            play_order: 0,
-        }))
+    if !toc.is_empty() {
+        return Ok(EpubToc::Ncx {
+            root: MyNavPoint(NavPoint {
+                label: String::new(),
+                content: PathBuf::new(),
+                children: toc,
+                play_order: 0,
+            }),
+        });
     }
+
+    if let EpubVersion::Version3_0 = version {
+        if let Some((path, nav_doc_content)) = book_find_nav_doc(&state) {
+            return Ok(EpubToc::Nav {
+                path,
+                xhtml: nav_doc_content,
+            });
+        }
+    }
+
+    Err(error::Error::EpubHasNoToc)
 }
 
 #[tauri::command]

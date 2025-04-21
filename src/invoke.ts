@@ -6,7 +6,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { CustomStyles, EpubDetails, EpubNavPoint, SpineItemData } from "./base";
+import { CustomStyles, EpubDetails, EpubNavPoint, EpubToc, SpineItemData } from "./base";
 
 export function getResource(path: string): Promise<string> {
 	const args = { path };
@@ -17,13 +17,31 @@ export function getDetails(): Promise<EpubDetails> {
 	return invoke("get_details");
 }
 
-export function getToc(): Promise<EpubNavPoint> {
-	return invoke("get_toc");
+export function getToc(): Promise<EpubToc> {
+	return invoke<Record<string, Record<string, unknown>>>("get_toc").then(result => {
+		let toc: EpubToc;
+		console.debug(result);
+		if (result["Nav"]) {
+			const parser = new DOMParser();
+			const { xhtml, path } = result["Nav"];
+			const navDoc = parser.parseFromString(xhtml as string, "application/xhtml+xml");
+			const nav = navDoc.querySelector<HTMLElement>("nav:has(>ol)");
+			if (!nav) {
+				throw new Error("TOC nav not found.");
+			}
+			toc = { kind: "nav", nav, path: path as string };
+		} else if (result["Ncx"]) {
+			const { root } = result["Ncx"];
+			toc = { kind: "ncx", root: root as EpubNavPoint };
+		} else {
+			throw new Error("Not Reached");
+		}
+		return toc;
+	});
 }
 
 export function getCustomStyles(): Promise<Partial<CustomStyles> | null> {
-	return invoke("get_custom_stylesheet").then(result => {
-		const savedSettings = result as string;
+	return invoke<string>("get_custom_stylesheet").then(savedSettings => {
 		if (savedSettings) {
 			const styles: CustomStyles = JSON.parse(savedSettings);
 			return styles;

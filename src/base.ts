@@ -27,6 +27,17 @@ export interface EpubNavPoint {
 	children: EpubNavPoint[];
 }
 
+export type EpubToc =
+	| {
+			kind: "nav";
+			path: string;
+			nav: HTMLElement;
+	  }
+	| {
+			kind: "ncx";
+			root: EpubNavPoint;
+	  };
+
 export type EpubMetadata = Record<string, string[]>;
 
 export interface EpubFileInfo {

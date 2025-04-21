@@ -7,13 +7,19 @@ import {
 	APP_NAME,
 	CustomStyles,
 	EpubDetails,
-	EpubNavPoint,
+	EpubToc,
 	FontPrefer,
 	isLocationNear,
 	markSessionInProgress,
 	repairEpubHref,
 	SpineItemData,
 } from "./base";
+import {
+	activateCustomizationInput,
+	commitCustomStylesFromSaved,
+	eventTargetIsCustomizationInput,
+	loadCustomizationContent,
+} from "./custom";
 import * as rs from "./invoke";
 import {
 	createBookDetailsUi,
@@ -26,12 +32,6 @@ import {
 	showNotePreview,
 	showToc,
 } from "./modals";
-import {
-	activateCustomizationInput,
-	commitCustomStylesFromSaved,
-	eventTargetIsCustomizationInput,
-	loadCustomizationContent,
-} from "./custom";
 import { Styler } from "./styler";
 
 // Elements. Initialized in DOMContentLoaded listener.
@@ -171,7 +171,7 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 		}
 	};
 	window.clearInterval(refreshTocBtnLabelId ?? undefined);
-	refreshTocBtnLabelId = window.setInterval(refreshTocBtnLabel, 1000);
+	refreshTocBtnLabelId = window.setInterval(refreshTocBtnLabel, 500);
 	refreshTocBtnLabel();
 
 	markSessionInProgress();
@@ -325,7 +325,7 @@ async function initDetails(): Promise<void> {
 }
 
 async function initToc(): Promise<void> {
-	let result: EpubNavPoint;
+	let result: EpubToc;
 	try {
 		result = await rs.getToc();
 	} catch (err) {
