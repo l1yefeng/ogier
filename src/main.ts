@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	};
 
 	if (takeSessionInProgress()) {
-		rs.reloadCurrent()
+		rs.reloadCurrent(true)
 			.then(spineItem => {
 				return initReaderFrame(spineItem);
 			})
@@ -55,7 +55,6 @@ document.addEventListener("DOMContentLoaded", () => {
 		paths: string[];
 		position: PhysicalPosition;
 	}>("tauri://drag-drop", event => {
-		console.debug(event);
 		const paths = event.payload.paths;
 		if (paths.length == 0) {
 		} else if (paths.length > 1) {

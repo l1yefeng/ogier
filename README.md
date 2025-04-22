@@ -4,9 +4,7 @@ Small and fast.
 
 ## TODO
 
-- TOC: offset 0 not working
 - TOC: label too long?
-- Reload: not simply get current, open same book, and reload opened stores.
 - KeyDown sometimes doesn't have focus
 - Use keyup and repeat. Make repeat count the distance to jump.
 - Improve performance when loading styles

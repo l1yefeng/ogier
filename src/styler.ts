@@ -32,7 +32,6 @@ export class Styler {
 				}
 
 				rs.getResource(path).then(css => {
-					console.debug(`loaded stylesheet ${path}: `, css);
 					if (!css) {
 						return reject(`Resource not found: ${path}`);
 					}

@@ -150,7 +150,6 @@ fn transform_css<'i>(
 }
 
 pub fn regulate_css(css: &str, font_substitute: &FontSubstitute) -> Option<String> {
-    println!("Regulating CSS: {}", css);
     let mut output = String::new();
 
     let mut input = ParserInput::new(css);

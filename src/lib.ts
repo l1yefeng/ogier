@@ -153,8 +153,7 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 
 	const refreshTocBtnLabel = () => {
 		const bodyTop = pageBody.getBoundingClientRect().top;
-		const bodyMarginTop = getComputedStyle(pageBody).marginBlockStart;
-		const currentOffset = parseFloat(bodyMarginTop) - bodyTop + 0.5;
+		const currentOffset = elemReaderHost!.getBoundingClientRect().height / 2 - bodyTop;
 		const btn = mostRecentNavPoint(spineItem.path, currentOffset, id => {
 			const target = readerShadowRoot!.getElementById(id);
 			if (!target) {

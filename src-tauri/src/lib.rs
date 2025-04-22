@@ -230,8 +230,22 @@ fn navigate_adjacent(
 }
 
 #[tauri::command]
-fn reload_current(state: tauri::State<AppState>) -> CmdResult<SpineItem> {
-    book_get_current(&state)
+fn reload_current(
+    window: tauri::Window,
+    state: tauri::State<AppState>,
+    book: bool,
+) -> CmdResult<SpineItem> {
+    if book {
+        let path = {
+            let state = state.lock().unwrap();
+            state.book_file_info.path.clone()
+        };
+        let prefs = window.store(PREFS_STORE)?;
+        prefs.reload()?;
+        book_open(&window, &path)
+    } else {
+        book_get_current(&state)
+    }
 }
 
 #[tauri::command]
@@ -329,12 +343,8 @@ fn set_custom_stylesheet(
     Ok(())
 }
 
-#[tauri::command]
-fn open_epub(
-    state: tauri::State<AppState>,
-    window: tauri::Window,
-    path: PathBuf,
-) -> CmdResult<SpineItem> {
+fn book_open(window: &tauri::Window, path: &PathBuf) -> CmdResult<SpineItem> {
+    let state = window.state::<AppState>();
     // open file
     let book = EpubDoc::new(&path)?;
     // TODO(optimize) async
@@ -425,6 +435,11 @@ fn open_epub(
 
     book_save_progress(&window, &state)?;
     book_get_current(&state)
+}
+
+#[tauri::command]
+fn open_epub(window: tauri::Window, path: PathBuf) -> CmdResult<SpineItem> {
+    book_open(&window, &path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

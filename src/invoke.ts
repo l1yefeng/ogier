@@ -20,7 +20,6 @@ export function getDetails(): Promise<EpubDetails> {
 export function getToc(): Promise<EpubToc> {
 	return invoke<Record<string, Record<string, unknown>>>("get_toc").then(result => {
 		let toc: EpubToc;
-		console.debug(result);
 		if (result["Nav"]) {
 			const parser = new DOMParser();
 			const { xhtml, path } = result["Nav"];
@@ -72,6 +71,7 @@ export function moveToInSpine(path: string): Promise<SpineItemData> {
 	return invoke("navigate_to", args);
 }
 
-export function reloadCurrent(): Promise<SpineItemData> {
-	return invoke("reload_current");
+export function reloadCurrent(book: boolean): Promise<SpineItemData> {
+	const args = { book };
+	return invoke("reload_current", args);
 }
