@@ -55,7 +55,7 @@ export function setCustomStyles(styles: CustomStyles): Promise<void> {
 	return invoke("set_custom_stylesheet", args);
 }
 
-export function openEpub(path: string): Promise<SpineItemData> {
+export function openEpub(path: string): Promise<[SpineItemData, number | null]> {
 	const args = { path };
 	return invoke("open_epub", args);
 }
@@ -71,7 +71,12 @@ export function moveToInSpine(path: string): Promise<SpineItemData> {
 	return invoke("navigate_to", args);
 }
 
-export function reloadCurrent(book: boolean): Promise<SpineItemData> {
+export function reloadCurrent(book: boolean): Promise<[SpineItemData, number | null]> {
 	const args = { book };
 	return invoke("reload_current", args);
+}
+
+export function setReadingPosition(position: number): Promise<void> {
+	const args = { position };
+	return invoke("set_reading_position", args);
 }

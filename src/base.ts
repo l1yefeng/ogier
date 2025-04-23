@@ -129,3 +129,37 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 export type FontPrefer = "sans-serif" | "serif" | null;
+
+export function getCurrentPosition(box: DOMRect, content: DOMRect): number {
+	return getCurrentPositionPx(box, content) / content.height;
+}
+
+export function getCurrentPositionPx(box: DOMRect, content: DOMRect): number {
+	return box.height / 5 - content.top;
+}
+
+export function getCurrentPositionInverse(
+	box: DOMRect,
+	content: DOMRect,
+	percentage: number,
+): number {
+	const top = percentage * content.height;
+	return top - box.height / 5;
+}
+
+export class TaskRepeater {
+	#intervalMs: number;
+	#handle: number | null = null;
+
+	constructor(intervalMs: number) {
+		this.#intervalMs = intervalMs;
+	}
+
+	restart(f: () => void): void {
+		if (this.#handle != null) {
+			window.clearInterval(this.#handle);
+		}
+		f();
+		this.#handle = window.setInterval(f, this.#intervalMs);
+	}
+}

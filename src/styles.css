@@ -29,8 +29,10 @@
 #og-frame {
 	display: flex;
 	height: 100vh;
+	width: 100vw;
 	position: absolute;
 	top: 0;
+	left: 0;
 	flex-direction: column;
 	background-color: var(--color-reader-bg);
 }
@@ -43,16 +45,28 @@
 /* Footer */
 
 #og-footer {
+	/* Positioning */
+	display: flex;
+	align-items: center;
+	text-wrap-mode: nowrap;
+	overflow: hidden;
+	#og-toc-button {
+		flex-shrink: 1;
+		min-width: 6em;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	#og-spine-position {
+		margin-inline: auto;
+	}
+	#og-customization {
+		margin-inline-start: 2ch;
+	}
+
 	font-size: 0.8rem;
 	cursor: default;
 	padding: 0.2rem 0.5ch;
-	display: flex;
 	user-select: none;
-
-	#og-spine-position {
-		margin-inline: auto;
-		align-self: center;
-	}
 
 	#og-toc-button-label {
 		margin-inline-start: 2px;

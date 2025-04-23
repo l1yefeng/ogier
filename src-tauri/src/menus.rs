@@ -294,8 +294,10 @@ pub mod help {
 pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
     match id {
         file::open_in_new_window::ID => Ok(()),
-        file::open::ID | file::show_in_folder::ID => file::show_in_folder::handle(app),
-        file::details::ID | file::table_of_contents::ID => handle_by_emit_event(app, id),
+        file::show_in_folder::ID => file::show_in_folder::handle(app),
+        file::open::ID | file::details::ID | file::table_of_contents::ID => {
+            handle_by_emit_event(app, id)
+        }
         file::open_preference_file::ID => file::open_preference_file::handle(app),
 
         view::font_preference::sans_serif::ID | view::font_preference::serif::ID => {

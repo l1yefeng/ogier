@@ -9,14 +9,14 @@ use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint};
 use tauri::{Manager, State, Window};
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_store::{StoreExt, resolve_store_path};
+use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
 
 use css::regulate_css;
@@ -108,16 +108,48 @@ fn book_find_nav_doc(state: &tauri::State<AppState>) -> Option<(PathBuf, String)
     })
 }
 
-fn book_save_progress(window: &Window, state: &State<AppState>) -> CmdResult<()> {
+fn book_save_progress(
+    window: &Window,
+    state: &State<AppState>,
+    percentage: Option<f64>,
+) -> CmdResult<()> {
     let state = state.lock().unwrap();
     let book = state.book.as_ref().unwrap();
-    let chapter_num = book.get_current_page();
-    let book_hash = &state.book_hash;
+    let pos_in_spine = book.get_current_page();
+    let book_hash = state.book_hash.as_str();
 
     // Save progress to the store
     let progress = window.store(PROGRESS_STORE)?;
-    progress.set(book_hash.as_str(), chapter_num);
+    let value = match percentage {
+        Some(f) => serde_json::json!([pos_in_spine, f]),
+        None => serde_json::json!([pos_in_spine]),
+    };
+    progress.set(book_hash, value);
     Ok(())
+}
+
+fn book_load_progress<R>(store: &Arc<Store<R>>, book_hash: &str) -> Option<(u64, Option<f64>)>
+where
+    R: tauri::Runtime,
+{
+    let Some(serde_json::Value::Array(vec)) = store.get(book_hash) else {
+        // No value or non-array value.
+        return None;
+    };
+
+    let in_spine = match vec.get(0) {
+        Some(serde_json::Value::Number(num)) => num.as_u64(),
+        _ => None,
+    };
+    let Some(in_spine) = in_spine else {
+        return None;
+    };
+
+    let in_page = match vec.get(1) {
+        Some(serde_json::Value::Number(num)) => num.as_f64(),
+        _ => None,
+    };
+    Some((in_spine, in_page))
 }
 
 fn compute_book_hash(filepath: &PathBuf) -> CmdResult<EpubHash> {
@@ -225,7 +257,7 @@ fn navigate_adjacent(
         // Not an error. Just means there is no next/prev page.
         return Ok(None);
     }
-    book_save_progress(&window, &state)?;
+    book_save_progress(&window, &state, None)?;
     book_get_current(&state).map(Some)
 }
 
@@ -234,7 +266,7 @@ fn reload_current(
     window: tauri::Window,
     state: tauri::State<AppState>,
     book: bool,
-) -> CmdResult<SpineItem> {
+) -> CmdResult<(SpineItem, Option<f64>)> {
     if book {
         let path = {
             let state = state.lock().unwrap();
@@ -244,7 +276,7 @@ fn reload_current(
         prefs.reload()?;
         book_open(&window, &path)
     } else {
-        book_get_current(&state)
+        book_get_current(&state).map(|x| (x, None))
     }
 }
 
@@ -261,7 +293,7 @@ fn navigate_to(window: Window, state: State<AppState>, path: String) -> CmdResul
     if !book_navigate(&state, Navigation::Position(position))? {
         return Err(Error::Epub(DocError::InvalidEpub));
     }
-    book_save_progress(&window, &state)?;
+    book_save_progress(&window, &state, None)?;
     book_get_current(&state)
 }
 
@@ -343,7 +375,16 @@ fn set_custom_stylesheet(
     Ok(())
 }
 
-fn book_open(window: &tauri::Window, path: &PathBuf) -> CmdResult<SpineItem> {
+#[tauri::command]
+fn set_reading_position(
+    window: tauri::Window,
+    state: tauri::State<AppState>,
+    position: f64,
+) -> CmdResult<()> {
+    book_save_progress(&window, &state, Some(position))
+}
+
+fn book_open(window: &tauri::Window, path: &PathBuf) -> CmdResult<(SpineItem, Option<f64>)> {
     let state = window.state::<AppState>();
     // open file
     let book = EpubDoc::new(&path)?;
@@ -375,14 +416,13 @@ fn book_open(window: &tauri::Window, path: &PathBuf) -> CmdResult<SpineItem> {
     }
 
     // retrieve progress. this happens only once
-    let progress = window.store(PROGRESS_STORE)?;
-
-    if let Some(serde_json::Value::Number(num)) = progress.get(book_hash) {
-        // use read progress
-        if let Some(chapter_num) = num.as_u64() {
-            let state = window.state::<AppState>();
-            let _changed = book_navigate(&state, Navigation::Position(chapter_num as usize))?;
-        }
+    let progress_store = window.store(PROGRESS_STORE)?;
+    let mut in_page_progress = None;
+    if let Some(progress) = book_load_progress(&progress_store, &book_hash) {
+        let (in_spine, in_page) = progress;
+        let state = window.state::<AppState>();
+        let _changed = book_navigate(&state, Navigation::Position(in_spine as usize))?;
+        in_page_progress = in_page;
     }
 
     let menu = menus::update(&window)?;
@@ -433,12 +473,12 @@ fn book_open(window: &tauri::Window, path: &PathBuf) -> CmdResult<SpineItem> {
         },
     )?;
 
-    book_save_progress(&window, &state)?;
-    book_get_current(&state)
+    book_save_progress(&window, &state, in_page_progress)?;
+    book_get_current(&state).map(|x| (x, in_page_progress))
 }
 
 #[tauri::command]
-fn open_epub(window: tauri::Window, path: PathBuf) -> CmdResult<SpineItem> {
+fn open_epub(window: tauri::Window, path: PathBuf) -> CmdResult<(SpineItem, Option<f64>)> {
     book_open(&window, &path)
 }
 
@@ -467,6 +507,7 @@ pub fn run() {
             open_epub,
             reload_current,
             set_custom_stylesheet,
+            set_reading_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

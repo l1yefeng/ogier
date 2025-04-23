@@ -4,11 +4,12 @@ Small and fast.
 
 ## TODO
 
-- TOC: label too long?
-- KeyDown sometimes doesn't have focus
+- Jump there in the preview modal.
+- Other methods to customize reader (when UI is too narrow).
+- Optimize: cache
+- Optimize: css
+- New window
 - Use keyup and repeat. Make repeat count the distance to jump.
-- Improve performance when loading styles
-- Store last read location: which line
 - Fetch font from archive
 
 ## App persistent state

@@ -9,10 +9,14 @@ import {
 	EpubDetails,
 	EpubToc,
 	FontPrefer,
+	getCurrentPosition,
+	getCurrentPositionInverse,
+	getCurrentPositionPx,
 	isLocationNear,
 	markSessionInProgress,
 	repairEpubHref,
 	SpineItemData,
+	TaskRepeater,
 } from "./base";
 import {
 	activateCustomizationInput,
@@ -49,7 +53,8 @@ let elemSpinePosition: HTMLElement | null;
 // See initReaderFrame() for initilization
 let readerShadowRoot: ShadowRoot | null = null;
 let styler: Styler | null = null;
-let refreshTocBtnLabelId: number | null = null;
+const refreshTocBtnLabelTask = new TaskRepeater(500);
+const saveReadingProgressTask = new TaskRepeater(2000);
 
 export function loadContent(): void {
 	elemFrame = document.getElementById("og-frame") as HTMLDivElement;
@@ -100,7 +105,10 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
 	styler!.setInPageStylesheet(cssInPage);
 }
 
-async function renderBookPage(spineItem: SpineItemData, scroll: number | null): Promise<void> {
+async function renderBookPage(
+	spineItem: SpineItemData,
+	percentage: number | null,
+): Promise<void> {
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
 
@@ -145,22 +153,31 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 
 	// insert the body
 	readerShadowRoot!.appendChild(pageBody);
-	if (scroll != null) {
-		elemReaderHost!.scroll({ top: scroll, behavior: "instant" });
+	if (percentage != null) {
+		const top = getCurrentPositionInverse(
+			elemReaderHost!.getBoundingClientRect(),
+			pageBody.getBoundingClientRect(),
+			percentage,
+		);
+		elemReaderHost!.scroll({ top, behavior: "instant" });
 	}
 
 	elemSpinePosition!.textContent = `Position: ${spineItem.position}`;
 
-	const refreshTocBtnLabel = () => {
-		const bodyTop = pageBody.getBoundingClientRect().top;
-		const currentOffset = elemReaderHost!.getBoundingClientRect().height / 2 - bodyTop;
-		const btn = mostRecentNavPoint(spineItem.path, currentOffset, id => {
-			const target = readerShadowRoot!.getElementById(id);
-			if (!target) {
-				return 0;
-			}
-			return target.getBoundingClientRect().top - bodyTop;
-		});
+	refreshTocBtnLabelTask.restart(() => {
+		const hostRect = elemReaderHost!.getBoundingClientRect();
+		const bodyRect = pageBody.getBoundingClientRect();
+		const btn = mostRecentNavPoint(
+			spineItem.path,
+			getCurrentPositionPx(hostRect, bodyRect),
+			id => {
+				const target = readerShadowRoot!.getElementById(id);
+				if (!target) {
+					return 0;
+				}
+				return target.getBoundingClientRect().top - bodyRect.top;
+			},
+		);
 		if (btn) {
 			elemTocBtnLabel!.lang = getModalsLanguage();
 			elemTocBtnLabel!.textContent = btn.textContent;
@@ -168,10 +185,12 @@ async function renderBookPage(spineItem: SpineItemData, scroll: number | null): 
 			elemTocBtnLabel!.removeAttribute("lang");
 			elemTocBtnLabel!.textContent = "Table of contents";
 		}
-	};
-	window.clearInterval(refreshTocBtnLabelId ?? undefined);
-	refreshTocBtnLabelId = window.setInterval(refreshTocBtnLabel, 500);
-	refreshTocBtnLabel();
+	});
+	saveReadingProgressTask.restart(() => {
+		const hostRect = elemReaderHost!.getBoundingClientRect();
+		const bodyRect = pageBody.getBoundingClientRect();
+		rs.setReadingPosition(getCurrentPosition(hostRect, bodyRect));
+	});
 
 	markSessionInProgress();
 }
@@ -246,7 +265,7 @@ async function navigateTo(path: string, locationId?: string): Promise<void> {
 		console.error(`Error jumping to ${path}:`, err);
 		return;
 	}
-	await renderBookPage(spineItemData, 0);
+	await renderBookPage(spineItemData, 0.0);
 	if (locationId) {
 		readerShadowRoot!.getElementById(locationId)?.scrollIntoView();
 	}
@@ -338,7 +357,10 @@ async function initToc(): Promise<void> {
 	getCurrentWebviewWindow().listen("menu/f_toc", showToc);
 }
 
-export async function initReaderFrame(spineItem: SpineItemData): Promise<void> {
+export async function initReaderFrame(
+	spineItem: SpineItemData,
+	percentage: number | null,
+): Promise<void> {
 	// TODO: don't duplicate
 	initToc();
 	initDetails();
@@ -360,14 +382,14 @@ export async function initReaderFrame(spineItem: SpineItemData): Promise<void> {
 		styler!.fontPreference = event.payload;
 	});
 
-	renderBookPage(spineItem, 0);
+	renderBookPage(spineItem, percentage);
 }
 
 function moveInSpine(next: boolean): void {
 	rs.moveInSpine(next)
 		.then(result => {
 			if (result) {
-				renderBookPage(result, next ? 0 : 1e6);
+				renderBookPage(result, next ? 0.0 : 1.0);
 			} else {
 				window.alert("No more pages.");
 			}
@@ -378,6 +400,10 @@ function moveInSpine(next: boolean): void {
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {
+	if (event.key == "Escape") {
+		elemReaderHost?.focus();
+	}
+
 	if (eventTargetIsCustomizationInput(event)) {
 		return;
 	}

@@ -73,17 +73,20 @@ export class Styler {
             img {
                 max-width: 100%;
             }
+			a {
+				text-decoration: none;
+			}
 		`;
 		if (this.#customStyles) {
 			const styles = this.#customStyles;
 			const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
 			const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
-			const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 500);
+			const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 45);
 
 			const baseFontSizeCss = baseFontSize.toFixed(2) + "px";
 			const lineHeightScaleCss = lineHeightScale.toFixed(3);
 			const hostLineHeightCss = (lineHeightScale * 1.25).toFixed(2);
-			const inlineMarginCss = `${(inlineMargin / 2).toFixed(2)}rem`;
+			const inlineMarginCss = `${inlineMargin}%`;
 
 			const host = this.#readerRoot.host as HTMLElement;
 			host.style.paddingInline = inlineMarginCss;

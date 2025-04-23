@@ -135,13 +135,7 @@ fn transform_css<'i>(
         };
         if let Some(close) = close {
             parser.parse_nested_block(|parser_nested| {
-                transform_css(
-                    parser_nested,
-                    output,
-                    expect_line_height,
-                    expect_font_family,
-                    font_substitute,
-                )
+                transform_css(parser_nested, output, false, false, font_substitute)
             })?;
             output.push(close);
         }
@@ -181,5 +175,16 @@ mod tests {
         let input = "body { color: green; p { color: red; a { color: blue } } }";
         let expected = "body { color: green; p { color: red; a { color: blue } } }";
         assert_eq!(regulate_css(input, &HashMap::new()).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_regulate_css_font_substitute() {
+        let input = ":host { font-family: sans-serif } head {}";
+        let expected = ":host { font-family: X } head {}";
+        let map = HashMap::from_iter(vec![
+            (String::from("sans-serif"), String::from("X")),
+            (String::from("head"), String::from("Y")),
+        ]);
+        assert_eq!(regulate_css(input, &map).unwrap(), expected);
     }
 }

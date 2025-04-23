@@ -19,8 +19,8 @@ async function chooseFileAndOpen(): Promise<void> {
 		],
 	});
 	if (path) {
-		const spineItem = await rs.openEpub(path);
-		await initReaderFrame(spineItem);
+		const [spineItem, percentage] = await rs.openEpub(path);
+		await initReaderFrame(spineItem, percentage);
 	}
 }
 
@@ -40,8 +40,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	if (takeSessionInProgress()) {
 		rs.reloadCurrent(true)
-			.then(spineItem => {
-				return initReaderFrame(spineItem);
+			.then(([spineItem, percentage]) => {
+				return initReaderFrame(spineItem, percentage);
 			})
 			.catch(err => {
 				window.alert(err);
@@ -67,8 +67,8 @@ document.addEventListener("DOMContentLoaded", () => {
 			} else {
 				// Proceed
 				rs.openEpub(path)
-					.then(spineItem => {
-						return initReaderFrame(spineItem);
+					.then(([spineItem, percentage]) => {
+						return initReaderFrame(spineItem, percentage);
 					})
 					.catch(err => {
 						window.alert(err);
