@@ -414,5 +414,12 @@ function handleKeyEvent(event: KeyboardEvent): void {
 	} else if (event.key == "ArrowLeft" || (event.ctrlKey && event.key == "PageUp")) {
 		event.preventDefault();
 		moveInSpine(false);
+	} else if (event.key == "t") {
+		event.preventDefault();
+		showToc();
+	} else if (event.key == "d" || event.key == "i") {
+		// TODO focus different tabs
+		event.preventDefault();
+		showDetails();
 	}
 }
