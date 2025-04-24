@@ -60,6 +60,10 @@ export function openEpub(path: string): Promise<[SpineItemData, number | null]> 
 	return invoke("open_epub", args);
 }
 
+export function openEpubIfLoaded(): Promise<[SpineItemData, number | null] | null> {
+	return invoke("open_epub_if_loaded");
+}
+
 // TODO: Rename the API
 export function moveInSpine(next: boolean): Promise<SpineItemData | null> {
 	const args = { next };
@@ -71,9 +75,8 @@ export function moveToInSpine(path: string): Promise<SpineItemData> {
 	return invoke("navigate_to", args);
 }
 
-export function reloadCurrent(book: boolean): Promise<[SpineItemData, number | null]> {
-	const args = { book };
-	return invoke("reload_current", args);
+export function reloadBook(): Promise<[SpineItemData, number | null]> {
+	return invoke("reload_book");
 }
 
 export function setReadingPosition(position: number): Promise<void> {

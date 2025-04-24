@@ -9,12 +9,12 @@ use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
 use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint};
-use tauri::{Manager, State, Window};
+use tauri::{AppHandle, Manager, State, Window};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
@@ -57,8 +57,11 @@ type AppState = Mutex<AppData>;
 const PROGRESS_STORE: &str = "progress.json";
 const PREFS_STORE: &str = "prefs.json";
 
-fn book_get_current(state: &tauri::State<AppState>) -> CmdResult<SpineItem> {
-    let mut state = state.lock().unwrap();
+// Helper functions, that tauri::commands depends on.
+// Don't lock state within. Receive state as argument.
+
+/// Acts on state.book. Returns the current spine item.
+fn book_get_current(state: &mut MutexGuard<'_, AppData>) -> CmdResult<SpineItem> {
     let book = state.book.as_mut().unwrap();
     let text = book.get_current_with_epub_uris()?;
     let text = String::from_utf8(text)?;
@@ -73,8 +76,9 @@ fn book_get_current(state: &tauri::State<AppState>) -> CmdResult<SpineItem> {
     })
 }
 
-fn book_navigate(state: &tauri::State<AppState>, command: Navigation) -> CmdResult<bool> {
-    let mut state = state.lock().unwrap();
+/// Acts on state.book. Navigate (change the current spine item) the spine.
+/// Returns false if going next/prev when at the end/beginning.
+fn book_navigate(state: &mut MutexGuard<'_, AppData>, command: Navigation) -> CmdResult<bool> {
     let book = state.book.as_mut().unwrap();
     Ok(match command {
         Navigation::Adjacent(true) => book.go_next(),
@@ -83,8 +87,9 @@ fn book_navigate(state: &tauri::State<AppState>, command: Navigation) -> CmdResu
     })
 }
 
-fn book_find_nav_doc(state: &tauri::State<AppState>) -> Option<(PathBuf, String)> {
-    let mut state = state.lock().unwrap();
+/// Acts on state.book. Find toc nav in the book.
+/// If a document contains one, returns its path and its content.
+fn book_find_nav_doc(state: &mut MutexGuard<'_, AppData>) -> Option<(PathBuf, String)> {
     let book = state.book.as_mut().unwrap();
     let resources: Vec<PathBuf> = book
         .resources
@@ -108,31 +113,41 @@ fn book_find_nav_doc(state: &tauri::State<AppState>) -> Option<(PathBuf, String)
     })
 }
 
-fn book_save_progress(
-    window: &Window,
-    state: &State<AppState>,
+/// Uses state.book. Also modifies progress store.
+/// Save the current spine item position in state to store.
+/// Optionally save the percentage.
+/// The JSON value is an array of length 1 or 2.
+fn book_progress_save<R>(
+    state: &MutexGuard<'_, AppData>,
+    progress_store: &Store<R>,
     percentage: Option<f64>,
-) -> CmdResult<()> {
-    let state = state.lock().unwrap();
+) -> CmdResult<()>
+where
+    R: tauri::Runtime,
+{
     let book = state.book.as_ref().unwrap();
     let pos_in_spine = book.get_current_page();
     let book_hash = state.book_hash.as_str();
 
     // Save progress to the store
-    let progress = window.store(PROGRESS_STORE)?;
     let value = match percentage {
         Some(f) => serde_json::json!([pos_in_spine, f]),
         None => serde_json::json!([pos_in_spine]),
     };
-    progress.set(book_hash, value);
+    progress_store.set(book_hash, value);
     Ok(())
 }
 
-fn book_load_progress<R>(store: &Arc<Store<R>>, book_hash: &str) -> Option<(u64, Option<f64>)>
+/// Uses state.book_hash. Also reads from progress store.
+/// Parsed result is returned as tuple.
+fn book_progress_load<R>(
+    state: &MutexGuard<'_, AppData>,
+    progress_store: &Store<R>,
+) -> Option<(u64, Option<f64>)>
 where
     R: tauri::Runtime,
 {
-    let Some(serde_json::Value::Array(vec)) = store.get(book_hash) else {
+    let Some(serde_json::Value::Array(vec)) = progress_store.get(state.book_hash) else {
         // No value or non-array value.
         return None;
     };
@@ -152,6 +167,131 @@ where
     Some((in_spine, in_page))
 }
 
+/// Cache part of prefs from store in state.
+/// Do call this after relevant prefs are changed in store.
+fn cache_prefs_in_state<R>(
+    state: &mut MutexGuard<'_, AppData>,
+    prefs_store: &Store<R>,
+) -> CmdResult<()>
+where
+    R: tauri::Runtime,
+{
+    // font.substitute
+    state.prefs_font_substitute.clear();
+    if let Some(value) = prefs_store.get("font.substitute") {
+        let serde_json::Value::Object(value) = value else {
+            return Err(error::Error::InvalidPrefs);
+        };
+        for (font, subs) in value.iter() {
+            let serde_json::Value::String(subs) = subs else {
+                return Err(error::Error::InvalidPrefs);
+            };
+            state
+                .prefs_font_substitute
+                .insert(font.clone(), subs.clone());
+        }
+    }
+
+    Ok(())
+}
+
+/// Do several things that are necessary when a book just opened.
+fn post_book_open(window: &Window, state: &MutexGuard<'_, AppData>) -> CmdResult<bool> {
+    let book = &state.book;
+    let Some(book) = book else {
+        return Ok(false);
+    };
+
+    // set window title with book title
+    let title = match book.mdata("title") {
+        Some(book_title) => format!("{} - OgierEPUB", book_title),
+        None => String::from("OgierEPUB"),
+    };
+    let _ = window.set_title(&title);
+
+    // update menu to complete
+    menus::update(&window)?;
+
+    let font_prefer_value = {
+        let prefs = window.store(PREFS_STORE)?;
+        prefs.get("font.prefer")
+    };
+    // not always necessary, because this part of menu depends on prefs, not books.
+    // but considering
+    menus::set_font_preference(
+        &window,
+        match font_prefer_value {
+            Some(serde_json::Value::String(value)) if value == "sans-serif" => {
+                Some(FontPrefer::SansSerif)
+            }
+            Some(serde_json::Value::String(value)) if value == "serif" => Some(FontPrefer::Serif),
+            _ => None,
+        },
+    )?;
+
+    Ok(true)
+}
+
+/// Open a book at the given path. State mutex is locked all time.
+/// When done, state is filled with the new data according to the book.
+///
+/// NOTE: It doesn't remember progress.
+/// NOTE: It doesn't feed book info to app/window. For that, see post_book_open.
+fn book_open(state: &mut MutexGuard<'_, AppData>, path: &PathBuf) -> CmdResult<()> {
+    log::info!("loading book at {}", path.to_string_lossy());
+
+    // open file
+    let book = EpubDoc::new(&path)?;
+
+    let book_hash = compute_book_hash(&path)?;
+    {
+        let file_metadata = std::fs::metadata(&path)?;
+
+        let as_ms = |time: SystemTime| {
+            time.duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or_default()
+        };
+
+        state.book = Some(book);
+        state.book_hash = book_hash;
+
+        state.book_file_info.path = path.clone();
+        state.book_file_info.size = file_metadata.len();
+        state.book_file_info.created = file_metadata.created().map(as_ms).unwrap_or_default();
+        state.book_file_info.modified = file_metadata.modified().map(as_ms).unwrap_or_default();
+    }
+
+    log::debug!("book opened and info extracted");
+
+    Ok(())
+}
+
+/// Call only after book_open has been called.
+fn book_get_init_page<R>(
+    state: &mut MutexGuard<'_, AppData>,
+    progress_store: &Store<R>,
+) -> CmdResult<(SpineItem, Option<f64>)>
+where
+    R: tauri::Runtime,
+{
+    // retrieve progress
+    let mut percentage = None;
+    if let Some(progress) = book_progress_load(state, progress_store) {
+        let (in_spine, in_page) = progress;
+        percentage = in_page;
+        let ok = book_navigate(state, Navigation::Position(in_spine as usize))?;
+        if !ok {
+            book_progress_save(state, progress_store, None)?;
+            percentage = None;
+        }
+    }
+
+    let spine_item = book_get_current(state)?;
+    Ok((spine_item, percentage))
+}
+
+// TODO: move out of lib.rs
 fn compute_book_hash(filepath: &PathBuf) -> CmdResult<EpubHash> {
     let mut hasher = XxHash64::with_seed(0);
 
@@ -174,18 +314,29 @@ fn compute_book_hash(filepath: &PathBuf) -> CmdResult<EpubHash> {
     Ok(EpubHash::from(&format!("{hash:016x}")).unwrap())
 }
 
-fn resource_base64_encoded(content: Vec<u8>, mime: String) -> String {
+// TODO: move out of lib.rs
+fn resource_base64_encode(content: Vec<u8>, mime: String) -> String {
     let mut buf = mime;
     buf.push_str(";base64,");
     general_purpose::STANDARD.encode_string(content, &mut buf);
     buf
 }
 
+fn custom_styles_path(
+    app_handle: &AppHandle,
+    state: &MutexGuard<'_, AppData>,
+) -> CmdResult<PathBuf> {
+    let mut path = resolve_store_path(app_handle, state.book_hash)?;
+    path.set_extension("json");
+    Ok(path)
+}
+
 #[tauri::command]
-fn get_resource(state: tauri::State<AppState>, path: PathBuf) -> CmdResult<String> {
+fn get_resource(state: State<AppState>, path: PathBuf) -> CmdResult<String> {
+    log::debug!("command get_resource[{}]", path.to_string_lossy());
     let (content, mime) = {
-        let mut state = state.lock().unwrap();
-        let book = state.book.as_mut().unwrap();
+        let mut state_guard = state.lock().unwrap();
+        let book = state_guard.book.as_mut().unwrap();
         (
             book.get_resource_by_path(&path),
             book.get_resource_mime_by_path(&path).unwrap_or_default(),
@@ -196,30 +347,30 @@ fn get_resource(state: tauri::State<AppState>, path: PathBuf) -> CmdResult<Strin
     };
 
     if mime.starts_with("image/") {
-        Ok(resource_base64_encoded(content, mime))
+        Ok(resource_base64_encode(content, mime))
     } else if mime.starts_with("text/") {
         let content = String::from_utf8(content)?;
         if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("css"))
         {
-            let state = state.lock().unwrap();
-            let font_substitute = &state.prefs_font_substitute;
+            let state_guard = state.lock().unwrap();
+            let font_substitute = &state_guard.prefs_font_substitute;
             Ok(regulate_css(&content, font_substitute).unwrap_or(content))
         } else {
             Ok(content)
         }
     } else {
-        eprintln!("ERR: Unsupported MIME type: {}", mime);
+        log::warn!("cannot handle because of mimetype: {}", mime);
         Ok(String::new())
     }
 }
 
 #[tauri::command]
-fn get_toc(state: tauri::State<AppState>) -> CmdResult<EpubToc> {
+fn get_toc(state: State<AppState>) -> CmdResult<EpubToc> {
     let (version, toc) = {
-        let state = state.lock().unwrap();
-        let book = state.book.as_ref().unwrap();
+        let state_guard = state.lock().unwrap();
+        let book = state_guard.book.as_ref().unwrap();
         // NOTE: this is the legacy NCX toc
         (book.version.clone(), book.toc.clone())
     };
@@ -236,7 +387,8 @@ fn get_toc(state: tauri::State<AppState>) -> CmdResult<EpubToc> {
     }
 
     if let EpubVersion::Version3_0 = version {
-        if let Some((path, nav_doc_content)) = book_find_nav_doc(&state) {
+        let mut state_guard = state.lock().unwrap();
+        if let Some((path, nav_doc_content)) = book_find_nav_doc(&mut state_guard) {
             return Ok(EpubToc::Nav {
                 path,
                 xhtml: nav_doc_content,
@@ -253,31 +405,16 @@ fn navigate_adjacent(
     state: State<AppState>,
     next: bool,
 ) -> CmdResult<Option<SpineItem>> {
-    if !book_navigate(&state, Navigation::Adjacent(next))? {
-        // Not an error. Just means there is no next/prev page.
-        return Ok(None);
+    let mut state_guard = state.lock().unwrap();
+    {
+        if !book_navigate(&mut state_guard, Navigation::Adjacent(next))? {
+            // Not an error. Just means there is no next/prev page.
+            return Ok(None);
+        }
     }
-    book_save_progress(&window, &state, None)?;
-    book_get_current(&state).map(Some)
-}
-
-#[tauri::command]
-fn reload_current(
-    window: tauri::Window,
-    state: tauri::State<AppState>,
-    book: bool,
-) -> CmdResult<(SpineItem, Option<f64>)> {
-    if book {
-        let path = {
-            let state = state.lock().unwrap();
-            state.book_file_info.path.clone()
-        };
-        let prefs = window.store(PREFS_STORE)?;
-        prefs.reload()?;
-        book_open(&window, &path)
-    } else {
-        book_get_current(&state).map(|x| (x, None))
-    }
+    let progress_store = window.store(PROGRESS_STORE)?;
+    book_progress_save(&state_guard, &progress_store, None)?;
+    book_get_current(&mut state_guard).map(Some)
 }
 
 #[tauri::command]
@@ -290,15 +427,18 @@ fn navigate_to(window: Window, state: State<AppState>, path: String) -> CmdResul
         return Err(Error::ResourcePathNotFound);
     };
 
-    if !book_navigate(&state, Navigation::Position(position))? {
+    let mut state_guard = state.lock().unwrap();
+
+    if !book_navigate(&mut state_guard, Navigation::Position(position))? {
         return Err(Error::Epub(DocError::InvalidEpub));
     }
-    book_save_progress(&window, &state, None)?;
-    book_get_current(&state)
+    let progress_store = window.store(PROGRESS_STORE)?;
+    book_progress_save(&state_guard, &progress_store, None)?;
+    book_get_current(&mut state_guard)
 }
 
 #[tauri::command]
-fn get_details(state: tauri::State<AppState>) -> CmdResult<EpubDetails> {
+fn get_details(state: State<AppState>) -> CmdResult<EpubDetails> {
     let file_info = {
         let state = state.lock().unwrap();
         state.book_file_info.clone()
@@ -323,7 +463,7 @@ fn get_details(state: tauri::State<AppState>) -> CmdResult<EpubDetails> {
     };
 
     let cover_base64 = cover
-        .map(|c_m| resource_base64_encoded(c_m.0, c_m.1))
+        .map(|c_m| resource_base64_encode(c_m.0, c_m.1))
         .unwrap_or_default();
 
     Ok(EpubDetails {
@@ -335,156 +475,115 @@ fn get_details(state: tauri::State<AppState>) -> CmdResult<EpubDetails> {
     })
 }
 
-fn custom_stylesheet_path(
-    app: &tauri::AppHandle,
-    state: &tauri::State<AppState>,
-) -> CmdResult<PathBuf> {
-    let mut css_path = {
-        let state = state.lock().unwrap();
-        resolve_store_path(&app, state.book_hash)?
-    };
-    css_path.set_extension("json");
-    Ok(css_path)
-}
-
 #[tauri::command]
-fn open_custom_stylesheet(app: tauri::AppHandle, state: tauri::State<AppState>) -> CmdResult<()> {
-    let css_path = custom_stylesheet_path(&app, &state)?;
-    app.opener()
-        .open_path(css_path.to_string_lossy(), None::<&str>)?;
+fn open_custom_stylesheet(app_handle: AppHandle, state: State<AppState>) -> CmdResult<()> {
+    let path = {
+        let state_guard = state.lock().unwrap();
+        custom_styles_path(&app_handle, &state_guard)?
+    };
+    app_handle
+        .opener()
+        .open_path(path.to_string_lossy(), None::<&str>)?;
     Ok(())
 }
 
 #[tauri::command]
-fn get_custom_stylesheet(
-    app: tauri::AppHandle,
-    state: tauri::State<AppState>,
-) -> CmdResult<String> {
-    let css_path = custom_stylesheet_path(&app, &state)?;
-    Ok(std::fs::read_to_string(css_path).unwrap_or_default())
+fn get_custom_stylesheet(app_handle: AppHandle, state: State<AppState>) -> CmdResult<String> {
+    let path = {
+        let state_guard = state.lock().unwrap();
+        custom_styles_path(&app_handle, &state_guard)?
+    };
+    Ok(std::fs::read_to_string(path).unwrap_or_default())
 }
 
 #[tauri::command]
 fn set_custom_stylesheet(
-    app: tauri::AppHandle,
-    state: tauri::State<AppState>,
+    app_handle: AppHandle,
+    state: State<AppState>,
     content: String,
 ) -> CmdResult<()> {
-    let css_path = custom_stylesheet_path(&app, &state)?;
-    std::fs::write(css_path, content)?;
+    let path = {
+        let state_guard = state.lock().unwrap();
+        custom_styles_path(&app_handle, &state_guard)?
+    };
+    std::fs::write(path, content)?;
     Ok(())
 }
 
 #[tauri::command]
-fn set_reading_position(
-    window: tauri::Window,
-    state: tauri::State<AppState>,
-    position: f64,
-) -> CmdResult<()> {
-    book_save_progress(&window, &state, Some(position))
+fn set_reading_position(window: Window, state: State<AppState>, position: f64) -> CmdResult<()> {
+    let state_guard = state.lock().unwrap();
+    let progress_store = window.store(PROGRESS_STORE)?;
+    book_progress_save(&state_guard, &progress_store, Some(position))
 }
 
-fn book_open(window: &tauri::Window, path: &PathBuf) -> CmdResult<(SpineItem, Option<f64>)> {
-    let state = window.state::<AppState>();
-    // open file
-    let book = EpubDoc::new(&path)?;
-    // TODO(optimize) async
-    if let Some(title) = book.mdata("title") {
-        window.set_title(&title.to_string()).unwrap_or_else(|err| {
-            eprintln!("ERR: Failed to set window title: {}.", err);
-        });
-    }
-
-    let book_hash = compute_book_hash(&path)?;
-    {
-        let file_metadata = std::fs::metadata(&path)?;
-
-        let as_ms = |time: SystemTime| {
-            time.duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or_default()
-        };
-
-        let mut state = state.lock().unwrap();
-        state.book = Some(book);
-        state.book_hash = book_hash;
-
-        state.book_file_info.path = path.clone();
-        state.book_file_info.size = file_metadata.len();
-        state.book_file_info.created = file_metadata.created().map(as_ms).unwrap_or_default();
-        state.book_file_info.modified = file_metadata.modified().map(as_ms).unwrap_or_default();
-    }
-
-    // retrieve progress. this happens only once
+fn open_epub_impl(
+    window: Window,
+    state: State<AppState>,
+    path: PathBuf,
+) -> CmdResult<(SpineItem, Option<f64>)> {
     let progress_store = window.store(PROGRESS_STORE)?;
-    let mut in_page_progress = None;
-    if let Some(progress) = book_load_progress(&progress_store, &book_hash) {
-        let (in_spine, in_page) = progress;
-        let state = window.state::<AppState>();
-        let _changed = book_navigate(&state, Navigation::Position(in_spine as usize))?;
-        in_page_progress = in_page;
-    }
+    let mut state_guard = state.lock().unwrap();
+    book_open(&mut state_guard, &path)?;
+    post_book_open(&window, &state_guard)?;
+    book_get_init_page(&mut state_guard, &progress_store)
+}
 
-    let menu = menus::update(&window)?;
-
-    // retrieve app preferences.
-    let prefs = window.store(PREFS_STORE)?;
-
-    // prefs - font.substitute
-    {
-        let mut state = state.lock().unwrap();
-        state.prefs_font_substitute.clear();
-    }
-    if let Some(value) = prefs.get("font.substitute") {
-        let serde_json::Value::Object(value) = value else {
-            return Err(error::Error::InvalidPrefs);
-        };
-        let mut state = state.lock().unwrap();
-        for (font, subs) in value.iter() {
-            let serde_json::Value::String(subs) = subs else {
-                return Err(error::Error::InvalidPrefs);
-            };
-            state
-                .prefs_font_substitute
-                .insert(font.clone(), subs.clone());
-        }
-    }
-
-    // prefs - font.prefer
-    menus::view::font_preference::set(
-        &menu
-            .get(menus::view::ID)
-            .unwrap()
-            .as_submenu_unchecked()
-            .get(menus::view::font_preference::ID)
-            .unwrap()
-            .as_submenu_unchecked(),
-        match prefs.get("font.prefer") {
-            Some(serde_json::Value::String(value)) => {
-                if value == "sans-serif" {
-                    Some(FontPrefer::SansSerif)
-                } else if value == "serif" {
-                    Some(FontPrefer::Serif)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        },
-    )?;
-
-    book_save_progress(&window, &state, in_page_progress)?;
-    book_get_current(&state).map(|x| (x, in_page_progress))
+/// Front-end invokes this to view EPUB at the given path.
+///
+/// Returns the current page and the reading position in page.
+#[tauri::command]
+fn open_epub(
+    window: Window,
+    state: State<AppState>,
+    path: PathBuf,
+) -> CmdResult<(SpineItem, Option<f64>)> {
+    log::debug!("command open_epub[{}]", path.to_string_lossy());
+    open_epub_impl(window, state, path)
 }
 
 #[tauri::command]
-fn open_epub(window: tauri::Window, path: PathBuf) -> CmdResult<(SpineItem, Option<f64>)> {
-    book_open(&window, &path)
+fn reload_book(
+    app_handle: AppHandle,
+    window: Window,
+    state: State<AppState>,
+) -> CmdResult<(SpineItem, Option<f64>)> {
+    log::debug!("command reload_book");
+    let path = {
+        let state_guard = state.lock().unwrap();
+        state_guard.book_file_info.path.clone()
+    };
+
+    let prefs_store = app_handle.store(PREFS_STORE)?;
+    prefs_store.reload()?;
+    cache_prefs_in_state(state.lock().as_mut().unwrap(), &prefs_store)?;
+
+    open_epub_impl(window, state, path)
+}
+
+#[tauri::command]
+fn open_epub_if_loaded(
+    window: Window,
+    state: State<AppState>,
+) -> CmdResult<Option<(SpineItem, Option<f64>)>> {
+    log::debug!("command open_epub_if_loaded");
+    let opened = post_book_open(&window, &state.lock().unwrap())?;
+    if !opened {
+        log::debug!("no book was loaded");
+        return Ok(None);
+    }
+
+    let mut state_guard = state.lock().unwrap();
+    post_book_open(&window, &state_guard)?;
+    let progress_store = window.store(PROGRESS_STORE)?;
+    book_get_init_page(&mut state_guard, &progress_store).map(Some)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run(filepath: Option<PathBuf>) {
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -493,8 +592,22 @@ pub fn run() {
         .on_menu_event(|handle, event| {
             let id = event.id().0.as_str();
             if let Err(err) = menus::handle_menu_event(handle, id) {
-                eprintln!("Failed to handle {}: {}", id, err);
+                log::error!("when handling menu event {}: {}", id, err);
             }
+        })
+        .setup(move |app| {
+            log::debug!("setup");
+            if let Some(filepath) = filepath {
+                log::debug!(" with {}", filepath.to_string_lossy());
+                let state = app.state::<AppState>();
+                book_open(state.lock().as_mut().unwrap(), &filepath)?;
+            }
+
+            let state = app.state::<AppState>();
+            let prefs_store = app.store(PREFS_STORE)?;
+            cache_prefs_in_state(state.lock().as_mut().unwrap(), &prefs_store)?;
+
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_custom_stylesheet,
@@ -504,8 +617,9 @@ pub fn run() {
             navigate_adjacent,
             navigate_to,
             open_custom_stylesheet,
+            open_epub_if_loaded,
             open_epub,
-            reload_current,
+            reload_book,
             set_custom_stylesheet,
             set_reading_position,
         ])

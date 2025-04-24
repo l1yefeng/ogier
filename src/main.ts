@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	};
 
 	if (takeSessionInProgress()) {
-		rs.reloadCurrent(true)
+		rs.reloadBook()
 			.then(([spineItem, percentage]) => {
 				return initReaderFrame(spineItem, percentage);
 			})
@@ -48,7 +48,19 @@ document.addEventListener("DOMContentLoaded", () => {
 				enableClickToOpen();
 			});
 	} else {
-		enableClickToOpen();
+		rs.openEpubIfLoaded()
+			.then(result => {
+				if (result != null) {
+					const [spineItem, percentage] = result;
+					return initReaderFrame(spineItem, percentage);
+				} else {
+					enableClickToOpen();
+				}
+			})
+			.catch(err => {
+				window.alert(err);
+				enableClickToOpen();
+			});
 	}
 
 	getCurrentWindow().listen<{

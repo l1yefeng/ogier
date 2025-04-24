@@ -1,5 +1,7 @@
 use tauri::{Emitter, menu::Menu};
 
+use crate::prefs::FontPrefer;
+
 fn handle_by_emit_event(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
     app.emit_to("main", &format!("menu/{id}"), ())
         .map_err(|e| e.to_string())
@@ -214,8 +216,8 @@ pub mod view {
         pub(super) const TEXT: &str = "Open custom styles";
 
         pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
-            let state = app.state();
-            let Ok(css_path) = crate::custom_stylesheet_path(&app, &state) else {
+            let state = app.state::<crate::AppState>();
+            let Ok(css_path) = crate::custom_styles_path(app, &state.lock().unwrap()) else {
                 return Err(String::from("failed to obtain custom styles file"));
             };
             app.opener()
@@ -255,7 +257,7 @@ pub mod help {
 
         pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
             app.opener()
-                .open_url("https://lyfeng.xyz/ogier", None::<&str>)
+                .open_url("https://ogier.lyfeng.xyz", None::<&str>)
                 .map_err(|e| e.to_string())
         }
     }
@@ -323,13 +325,14 @@ where
     Ok(menu)
 }
 
-pub fn update<R>(window: &tauri::Window<R>) -> tauri::Result<Menu<R>>
+/// Returns true if updated. The function does nothing if the menu has been updated.
+pub fn update<R>(window: &tauri::Window<R>) -> tauri::Result<bool>
 where
     R: tauri::Runtime,
 {
     let menu = window.menu().unwrap();
     if menu.get(view::ID).is_some() {
-        return Ok(menu);
+        return Ok(false);
     }
 
     // File
@@ -340,5 +343,22 @@ where
     let view_submenu = view::make(window)?;
     menu.insert(&view_submenu, 1)?;
 
-    Ok(menu)
+    Ok(true)
+}
+
+pub fn set_font_preference<R>(
+    window: &tauri::Window<R>,
+    value: Option<FontPrefer>,
+) -> Result<(), crate::error::Error>
+where
+    R: tauri::Runtime,
+{
+    let menu = window.menu().unwrap();
+    let view = menu.get(view::ID).unwrap();
+    let view = view.as_submenu_unchecked();
+    let font_preference = view.get(view::font_preference::ID).unwrap();
+    let font_preference = font_preference.as_submenu_unchecked();
+
+    view::font_preference::set(font_preference, value)?;
+    Ok(())
 }

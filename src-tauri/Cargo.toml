@@ -18,10 +18,12 @@ arrayvec = "0.7.6"
 base64 = "0.22.1"
 cssparser = "0.35.0"
 epub = { git = "https://github.com/danigm/epub-rs", rev = "429b5c6170c4d8fd343953b2b651b03c4b36c666" }
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-store = "2"
 thiserror = "2.0.12"
@@ -36,3 +38,6 @@ lto = true # Enables link-time-optimizations.
 # opt-level = "s" # Prioritizes small binary size. Use `3` if you prefer speed.
 panic = "abort" # Higher performance by disabling panic handlers.
 strip = true # Ensures debug symbols are removed.
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-window-state = "2"
