@@ -7,7 +7,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ogier EPUB Reader</title>
   <script type="module" src="/src/main.ts" defer></script>
-  <script type="module" src="/src/fluent.ts" defer></script>
 </head>
 
 <body id="og-body">
@@ -45,6 +44,9 @@
     <!-- TODO: tooltip -->
     <dialog id="og-preview-modal">
       <div id="og-preview-div"></div>
+      <form method="dialog">
+        <button id="og-preview-go-there">Go there</button>
+      </form>
     </dialog>
     <dialog id="og-details-modal">
       <div id="og-details-div">
@@ -52,16 +54,20 @@
           <img id="og-details-cover" alt="cover">
           <figcaption>Book Cover Unavailable</figcaption>
         </figure>
-        <fluent-tabs>
-          <fluent-tab>Book</fluent-tab>
-          <fluent-tab>File</fluent-tab>
-          <fluent-tab-panel>
-            <table id="og-book-details"></table>
-          </fluent-tab-panel>
-          <fluent-tab-panel>
-            <table id="og-file-details"></table>
-          </fluent-tab-panel>
-        </fluent-tabs>
+        <div>
+          <details name="og-details" open>
+            <summary>Book info</summary>
+            <dl id="og-details-book"></dl>
+          </details>
+          <details name="og-details">
+            <summary>EPUB metadata</summary>
+            <pre id="og-details-metadata"></pre>
+          </details>
+          <details name="og-details">
+            <summary>File info</summary>
+            <dl id="og-details-file"></dl>
+          </details>
+        </div>
       </div>
     </dialog>
   </div>

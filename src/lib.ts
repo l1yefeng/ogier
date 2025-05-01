@@ -32,6 +32,7 @@ import {
 	loadModalsContent,
 	mostRecentNavPoint,
 	setModalsLanguage,
+	setupNotePreview,
 	showDetails,
 	showNotePreview,
 	showToc,
@@ -192,6 +193,10 @@ async function renderBookPage(
 		rs.setReadingPosition(getCurrentPosition(hostRect, bodyRect));
 	});
 
+	setupNotePreview(targetId => {
+		readerShadowRoot!.getElementById(targetId)?.scrollIntoView();
+	});
+
 	markSessionInProgress();
 }
 
@@ -252,7 +257,7 @@ function previewSamePageLocation(anchor: HTMLElement, id: string): void {
 	if (elem) {
 		const contentRoot = createSamePageLocationPreviewContent(anchor, id);
 		if (contentRoot) {
-			showNotePreview(contentRoot);
+			showNotePreview(contentRoot, id);
 		}
 	}
 }

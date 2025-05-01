@@ -5,23 +5,27 @@
 import { EpubDetails, EpubNavPoint, EpubToc } from "./base";
 
 let elemDetailsModal: HTMLDialogElement | null;
-let elemBookDetailsTable: HTMLTableElement | null;
-let elemFileDetailsTable: HTMLTableElement | null;
+let elemDetailsBookDl: HTMLDListElement | null;
+let elemDetailsMetadataPre: HTMLPreElement | null;
+let elemDetailsFileDl: HTMLDListElement | null;
 let elemDetailsCoverImg: HTMLImageElement | null;
 let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
+let elemPreviewGoThereBtn: HTMLButtonElement | null;
 
 export function loadModalsContent(): void {
 	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
-	elemBookDetailsTable = document.getElementById("og-book-details") as HTMLTableElement;
+	elemDetailsBookDl = document.getElementById("og-details-book") as HTMLDListElement;
+	elemDetailsMetadataPre = document.getElementById("og-details-metadata") as HTMLPreElement;
+	elemDetailsFileDl = document.getElementById("og-details-file") as HTMLDListElement;
 	elemDetailsCoverImg = document.getElementById("og-details-cover") as HTMLImageElement;
-	elemFileDetailsTable = document.getElementById("og-file-details") as HTMLTableElement;
 	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
 	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
+	elemPreviewGoThereBtn = document.getElementById("og-preview-go-there") as HTMLButtonElement;
 }
 
 export function setModalsLanguage(lang: string): void {
@@ -46,24 +50,27 @@ export function createBookDetailsUi(details: EpubDetails): void {
 		elemDetailsCoverImg!.replaceWith(h);
 	}
 
-	elemBookDetailsTable!.replaceChildren(
-		...Object.entries(details.metadata).map(([key, values]) =>
-			createDetailsTableRow(key, values),
+	elemDetailsBookDl!.replaceChildren(
+		...Object.entries(details.metadata).flatMap(([key, values]) =>
+			createDetailsDlItem(key, values),
 		),
 	);
 
-	elemFileDetailsTable!.replaceChildren(
-		createDetailsTableRow("Path", details.fileInfo.path),
-		createDetailsTableRow("Size", `${details.fileInfo.size.toLocaleString()} bytes`),
+	elemDetailsMetadataPre!.textContent = "TO DO";
+
+	elemDetailsFileDl!.replaceChildren();
+	elemDetailsFileDl!.append(...createDetailsDlItem("Path", details.fileInfo.path));
+	elemDetailsFileDl!.append(
+		...createDetailsDlItem("Size", `${details.fileInfo.size.toLocaleString()} bytes`),
 	);
 	if (details.fileInfo.created) {
-		elemFileDetailsTable!.appendChild(
-			createDetailsTableRow("Created at", timeStringFromMs(details.fileInfo.created)),
+		elemDetailsFileDl!.append(
+			...createDetailsDlItem("Created at", timeStringFromMs(details.fileInfo.created)),
 		);
 	}
 	if (details.fileInfo.modified) {
-		elemFileDetailsTable!.appendChild(
-			createDetailsTableRow("Modified at", timeStringFromMs(details.fileInfo.modified)),
+		elemDetailsFileDl!.append(
+			...createDetailsDlItem("Modified at", timeStringFromMs(details.fileInfo.modified)),
 		);
 	}
 }
@@ -74,19 +81,20 @@ function timeStringFromMs(ms: number): string {
 	return date.toLocaleString();
 }
 
-function createDetailsTableRow(prop: string, value: string | string[]): HTMLTableRowElement {
-	const tr = document.createElement("tr");
-	const th = document.createElement("th");
-	const td = document.createElement("td");
-	tr.append(th, td);
+function createDetailsDlItem(
+	prop: string,
+	value: string | string[],
+): [HTMLElement, HTMLElement] {
+	const dt = document.createElement("dt");
+	const dd = document.createElement("dd");
 
-	th.textContent = prop;
+	dt.textContent = prop;
 
 	if (value instanceof Array) {
 		if (value.length > 1) {
 			// use a list
 			const ol = document.createElement("ol");
-			td.appendChild(ol);
+			dd.appendChild(ol);
 			ol.append(
 				...value.map(v => {
 					const li = document.createElement("li");
@@ -95,13 +103,13 @@ function createDetailsTableRow(prop: string, value: string | string[]): HTMLTabl
 				}),
 			);
 		} else {
-			td.textContent = value[0];
+			dd.textContent = value[0];
 		}
 	} else {
-		td.textContent = value;
+		dd.textContent = value;
 	}
 
-	return tr;
+	return [dt, dd];
 }
 
 export function showDetails(): void {
@@ -201,14 +209,14 @@ export function createTocUi(
 
 	elemTocNav!.replaceChildren(heading, ol);
 
-	elemTocModal!.addEventListener("close", async () => {
+	elemTocModal!.onclose = async () => {
 		const value = elemTocModal!.returnValue;
 		if (value) {
 			// If there is no hash, locationId is undefined.
 			const [path, locationId] = value.split("#", 2);
 			await navigateTo(path, locationId);
 		}
-	});
+	};
 }
 
 let lastMostRecentNavPoint: HTMLButtonElement | null = null;
@@ -260,10 +268,20 @@ export function showToc(): void {
 // Note preview
 //
 
-export function showNotePreview(floatingContentRoot: HTMLElement): void {
+export function showNotePreview(floatingContentRoot: HTMLElement, noteId: string): void {
 	closeAllModals();
 	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
 	elemPreviewModal!.showModal();
+	elemPreviewGoThereBtn!.value = noteId;
+}
+
+export function setupNotePreview(handler: (targetId: string) => void): void {
+	elemPreviewModal!.onclose = () => {
+		const ret = elemPreviewModal!.returnValue;
+		if (ret) {
+			handler(ret);
+		}
+	};
 }
 
 function closeAllModals(): void {

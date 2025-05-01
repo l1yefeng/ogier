@@ -4,13 +4,13 @@ Small and fast.
 
 ## TODO
 
-- Jump there in the preview modal.
+- Highlight the target after jumping there from preview modal.
 - Handle error if given path doesn't have EPUB.
 - Dark theme.
 - New window?
 - Other methods to customize reader (when UI is too narrow).
-- Optimize: cache
-- Optimize: css
+- Optimize: cache; https://crates.io/crates/lru
+- Optimize: css loading
 - Use keyup and repeat. Make repeat count the distance to jump.
 - Fetch font from archive
 

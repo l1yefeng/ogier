@@ -11,17 +11,17 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@fluentui/web-components": "^2.6.1",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.1",
     "@tauri-apps/plugin-log": "^2.4.0",
     "@tauri-apps/plugin-opener": "^2.2.6"
   },
   "devDependencies": {
-    "@fluentui/svg-icons": "^1.1.297",
+    "@fluentui/svg-icons": "^1.1.298",
     "@tauri-apps/cli": "^2.5.0",
-    "@types/bun": "^1.2.10",
+    "@types/bun": "^1.2.11",
+    "prettier": "^3.5.3",
     "typescript": "^5.8.3",
-    "vite": "^6.3.3"
+    "vite": "^6.3.4"
   }
 }
