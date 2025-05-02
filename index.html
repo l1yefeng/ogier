@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="/src/styles.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ogier EPUB Reader</title>
+  <script type="module" src="/src/my-modal.ts"></script>
   <script type="module" src="/src/main.ts" defer></script>
 </head>
 
@@ -36,19 +37,15 @@
         </label>
       </div>
     </footer>
-    <dialog id="og-toc-modal">
-      <form method="dialog">
-        <nav id="og-toc-nav">Loading...</nav>
-      </form>
-    </dialog>
-    <!-- TODO: tooltip -->
-    <dialog id="og-preview-modal">
+    <my-modal id="og-toc-modal">
+      <span id="og-toc-modal-heading" slot="in-header"></span>
+      <nav id="og-toc-nav">Loading...</nav>
+    </my-modal>
+    <my-modal id="og-preview-modal">
+      <button id="og-preview-go-there" slot="in-header">Go there</button>
       <div id="og-preview-div"></div>
-      <form method="dialog">
-        <button id="og-preview-go-there">Go there</button>
-      </form>
-    </dialog>
-    <dialog id="og-details-modal">
+    </my-modal>
+    <my-modal id="og-details-modal">
       <div id="og-details-div">
         <figure>
           <img id="og-details-cover" alt="cover">
@@ -69,8 +66,45 @@
           </details>
         </div>
       </div>
-    </dialog>
+    </my-modal>
   </div>
+
+  <template id="og-templ-my-modal">
+    <style>
+      dialog {
+        padding: 0;
+      }
+
+      form {
+        max-height: 80vh;
+        padding: 0.8rem;
+        display: flex;
+        flex-direction: column;
+      }
+
+      form>header {
+        flex: 0 0;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      form>div {
+        flex: 1 1 auto;
+        overflow: auto;
+      }
+    </style>
+    <dialog>
+      <form method="dialog">
+        <header>
+          <slot name="in-header"></slot>
+          <button value="">✖</button>
+        </header>
+        <div>
+          <slot></slot>
+        </div>
+      </form>
+    </dialog>
+  </template>
 </body>
 
 </html>
