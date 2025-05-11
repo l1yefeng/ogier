@@ -3,31 +3,27 @@
  */
 
 import { EpubDetails, EpubNavPoint, EpubToc } from "./base";
-import { MyModal } from "./my-modal";
 
-let elemDetailsModal: MyModal | null;
-let elemTocModal: MyModal | null;
-let elemPreviewModal: MyModal | null;
-
+let elemDetailsModal: HTMLDialogElement | null;
 let elemDetailsBookDl: HTMLDListElement | null;
 let elemDetailsMetadataPre: HTMLPreElement | null;
 let elemDetailsFileDl: HTMLDListElement | null;
 let elemDetailsCoverImg: HTMLImageElement | null;
-let elemTocModalHeading: HTMLElement | null;
+let elemTocModal: HTMLDialogElement | null;
 let elemTocNav: HTMLElement | null;
+let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
 let elemPreviewGoThereBtn: HTMLButtonElement | null;
 
 export function loadModalsContent(): void {
-	elemDetailsModal = document.getElementById("og-details-modal") as MyModal;
-	elemTocModal = document.getElementById("og-toc-modal") as MyModal;
-	elemPreviewModal = document.getElementById("og-preview-modal") as MyModal;
+	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
 	elemDetailsBookDl = document.getElementById("og-details-book") as HTMLDListElement;
 	elemDetailsMetadataPre = document.getElementById("og-details-metadata") as HTMLPreElement;
 	elemDetailsFileDl = document.getElementById("og-details-file") as HTMLDListElement;
 	elemDetailsCoverImg = document.getElementById("og-details-cover") as HTMLImageElement;
-	elemTocModalHeading = document.getElementById("og-toc-modal-heading") as HTMLElement;
+	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
+	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
 	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
 	elemPreviewGoThereBtn = document.getElementById("og-preview-go-there") as HTMLButtonElement;
 }
@@ -117,9 +113,8 @@ function createDetailsDlItem(
 }
 
 export function showDetails(): void {
-	elemTocModal!.close();
-	elemPreviewModal!.close();
-	elemDetailsModal!.show();
+	closeAllModals();
+	elemDetailsModal!.showModal();
 }
 
 // Toc
@@ -129,7 +124,6 @@ function createNavPointNcx(navPoint: EpubNavPoint): HTMLLIElement {
 	const elemNavPoint = document.createElement("li");
 
 	const elemNavBtn = document.createElement("button");
-	elemNavBtn.formMethod = "dialog";
 	elemNavBtn.textContent = navPoint.label;
 	elemNavBtn.value = navPoint.content;
 	const [path, locationId] = navPoint.content.split("#", 2);
@@ -193,9 +187,10 @@ export function createTocUi(
 	toc: EpubToc,
 	navigateTo: (path: string, locationId?: string) => Promise<void>,
 ): void {
+	let heading = document.createElement("h1");
 	let ol: HTMLOListElement;
 	if (toc.kind == "ncx") {
-		elemTocModalHeading!.textContent = "Table of Contents";
+		heading.textContent = "Table of Contents";
 		ol = document.createElement("ol");
 		ol.append(...toc.root.children.map(createNavPointNcx));
 	} else {
@@ -204,21 +199,24 @@ export function createTocUi(
 			child => child instanceof HTMLHeadingElement,
 		);
 		if (originalHeading) {
-			elemTocModalHeading!.replaceChildren(...originalHeading.childNodes);
+			heading.append(...originalHeading.childNodes);
 		} else {
-			elemTocModalHeading!.textContent = "Table of Contents";
+			heading.textContent = "Table of Contents";
 		}
 		ol = [...nav.children].find(child => child instanceof HTMLOListElement)!;
 		remakeNavPoints(ol, path);
 	}
 
-	elemTocNav!.replaceChildren(ol);
+	elemTocNav!.replaceChildren(heading, ol);
 
-	elemTocModal!.setOnClose(async value => {
-		// If there is no hash, locationId is undefined.
-		const [path, locationId] = value.split("#", 2);
-		await navigateTo(path, locationId);
-	});
+	elemTocModal!.onclose = async () => {
+		const value = elemTocModal!.returnValue;
+		if (value) {
+			// If there is no hash, locationId is undefined.
+			const [path, locationId] = value.split("#", 2);
+			await navigateTo(path, locationId);
+		}
+	};
 }
 
 let lastMostRecentNavPoint: HTMLButtonElement | null = null;
@@ -262,7 +260,8 @@ export function mostRecentNavPoint(
 }
 
 export function showToc(): void {
-	elemTocModal!.show();
+	closeAllModals();
+	elemTocModal!.showModal();
 	lastMostRecentNavPoint?.scrollIntoView();
 }
 
@@ -270,13 +269,23 @@ export function showToc(): void {
 //
 
 export function showNotePreview(floatingContentRoot: HTMLElement, noteId: string): void {
-	elemTocModal!.close();
-	elemDetailsModal!.close();
+	closeAllModals();
 	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
-	elemPreviewModal!.show();
+	elemPreviewModal!.showModal();
 	elemPreviewGoThereBtn!.value = noteId;
 }
 
 export function setupNotePreview(handler: (targetId: string) => void): void {
-	elemPreviewModal!.setOnClose(handler);
+	elemPreviewModal!.onclose = () => {
+		const ret = elemPreviewModal!.returnValue;
+		if (ret) {
+			handler(ret);
+		}
+	};
+}
+
+function closeAllModals(): void {
+	elemTocModal!.close();
+	elemDetailsModal!.close();
+	elemPreviewModal!.close();
 }
