@@ -4,9 +4,11 @@
 
 import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
+
 import { takeSessionInProgress } from "./base";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
+import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./strings.json";
 
 async function chooseFileAndOpen(): Promise<void> {
 	const path = await open({
@@ -70,12 +72,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		const paths = event.payload.paths;
 		if (paths.length == 0) {
 		} else if (paths.length > 1) {
-			window.alert("One at a time.");
+			window.alert(file_picker_multiple_file_alert);
 		} else {
 			const path = paths[0];
 			const parts = path.split(".");
 			if (parts[parts.length - 1].toLowerCase() != "epub") {
-				window.alert("EPUB only");
+				window.alert(file_picker_not_epub_alert);
 			} else {
 				// Proceed
 				rs.openEpub(path)

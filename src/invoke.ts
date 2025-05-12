@@ -24,14 +24,15 @@ export function getToc(): Promise<EpubToc> {
 			const parser = new DOMParser();
 			const { xhtml, path } = result["Nav"];
 			const navDoc = parser.parseFromString(xhtml as string, "application/xhtml+xml");
+			const lang = navDoc.documentElement.lang;
 			const nav = navDoc.querySelector<HTMLElement>("nav:has(>ol)");
 			if (!nav) {
 				throw new Error("TOC nav not found.");
 			}
-			toc = { kind: "nav", nav, path: path as string };
+			toc = { kind: "nav", nav, path: path as string, lang };
 		} else if (result["Ncx"]) {
 			const { root } = result["Ncx"];
-			toc = { kind: "ncx", root: root as EpubNavPoint };
+			toc = { kind: "ncx", root: root as EpubNavPoint, lang: "" };
 		} else {
 			throw new Error("Not Reached");
 		}

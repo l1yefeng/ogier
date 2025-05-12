@@ -3,8 +3,13 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import {
+	end_of_spine_message,
+	toc_default_title,
+	toc_unavailable_message,
+} from "./strings.json";
+
+import {
 	anchoredSamePageLocation,
-	APP_NAME,
 	CustomStyles,
 	EpubDetails,
 	EpubToc,
@@ -18,6 +23,7 @@ import {
 	SpineItemData,
 	TaskRepeater,
 } from "./base";
+import { Context } from "./context";
 import {
 	activateCustomizationInput,
 	commitCustomStylesFromSaved,
@@ -28,11 +34,11 @@ import * as rs from "./invoke";
 import {
 	createBookDetailsUi,
 	createTocUi,
-	getModalsLanguage,
 	loadModalsContent,
 	mostRecentNavPoint,
 	setModalsLanguage,
-	setupNotePreview,
+	setupNotePreviewCloseListener,
+	setupTocCloseListener,
 	showDetails,
 	showNotePreview,
 	showToc,
@@ -115,6 +121,8 @@ async function renderBookPage(
 
 	const parser = new DOMParser();
 	const pageDoc = parser.parseFromString(spineItem.text, "application/xhtml+xml");
+	Context.spineItemLang = pageDoc.documentElement.lang;
+	elemReaderHost!.lang = Context.spineItemLang || Context.epubLang;
 	const pageBody = pageDoc.body;
 
 	// load all images: <img> and svg <image>
@@ -163,7 +171,7 @@ async function renderBookPage(
 		elemReaderHost!.scroll({ top, behavior: "instant" });
 	}
 
-	elemSpinePosition!.textContent = `Position: ${spineItem.position}`;
+	elemSpinePosition!.textContent = `Position: ${spineItem.position} / ${Context.spineLength!}`;
 
 	refreshTocBtnLabelTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();
@@ -180,11 +188,11 @@ async function renderBookPage(
 			},
 		);
 		if (btn) {
-			elemTocBtnLabel!.lang = getModalsLanguage();
+			elemTocBtnLabel!.lang = btn.closest<HTMLElement>("[lang]")?.lang!;
 			elemTocBtnLabel!.textContent = btn.textContent;
 		} else {
 			elemTocBtnLabel!.removeAttribute("lang");
-			elemTocBtnLabel!.textContent = "Table of contents";
+			elemTocBtnLabel!.textContent = toc_default_title;
 		}
 	});
 	saveReadingProgressTask.restart(() => {
@@ -193,7 +201,7 @@ async function renderBookPage(
 		rs.setReadingPosition(getCurrentPosition(hostRect, bodyRect));
 	});
 
-	setupNotePreview(targetId => {
+	setupNotePreviewCloseListener(targetId => {
 		readerShadowRoot!.getElementById(targetId)?.scrollIntoView();
 	});
 
@@ -319,19 +327,6 @@ function handleClickInReader(event: PointerEvent): void {
 	}
 }
 
-function refreshUiWithBookDetails(details: EpubDetails): void {
-	if (details.metadata.language) {
-		const lang = details.metadata.language[0];
-		if (lang) {
-			elemReaderHost!.lang = lang;
-			setModalsLanguage(lang);
-		}
-	}
-	if (details.displayTitle) {
-		document.title = `${details.displayTitle} - ${APP_NAME}`;
-	}
-}
-
 async function initDetails(): Promise<void> {
 	let details: EpubDetails;
 	try {
@@ -341,7 +336,11 @@ async function initDetails(): Promise<void> {
 		return;
 	}
 
-	refreshUiWithBookDetails(details);
+	if (details.metadata.language) {
+		Context.epubLang = details.metadata.language[0] ?? "";
+	}
+	setModalsLanguage();
+	Context.spineLength = details.spineLength;
 	createBookDetailsUi(details);
 
 	getCurrentWebviewWindow().listen("menu/f_d", showDetails);
@@ -354,10 +353,11 @@ async function initToc(): Promise<void> {
 	} catch (err) {
 		console.error("Error loading TOC:", err);
 		elemTocButton!.disabled = true;
-		elemTocButton!.title = "Table of contents not available";
+		elemTocButton!.title = toc_unavailable_message;
 		return;
 	}
-	createTocUi(result, navigateTo);
+	createTocUi(result);
+	setupTocCloseListener(navigateTo);
 
 	getCurrentWebviewWindow().listen("menu/f_toc", showToc);
 }
@@ -396,7 +396,7 @@ function moveInSpine(next: boolean): void {
 			if (result) {
 				renderBookPage(result, next ? 0.0 : 1.0);
 			} else {
-				window.alert("No more pages.");
+				window.alert(end_of_spine_message);
 			}
 		})
 		.catch(err => {

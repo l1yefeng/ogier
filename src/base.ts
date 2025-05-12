@@ -32,10 +32,12 @@ export type EpubToc =
 			kind: "nav";
 			path: string;
 			nav: HTMLElement;
+			lang: string;
 	  }
 	| {
 			kind: "ncx";
 			root: EpubNavPoint;
+			lang: string;
 	  };
 
 export type EpubMetadata = Record<string, string[]>;

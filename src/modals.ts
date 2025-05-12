@@ -3,6 +3,8 @@
  */
 
 import { EpubDetails, EpubNavPoint, EpubToc } from "./base";
+import { Context } from "./context";
+import { toc_default_title } from "./strings.json";
 
 let elemDetailsModal: HTMLDialogElement | null;
 let elemDetailsBookDl: HTMLDListElement | null;
@@ -10,6 +12,7 @@ let elemDetailsMetadataPre: HTMLPreElement | null;
 let elemDetailsFileDl: HTMLDListElement | null;
 let elemDetailsCoverImg: HTMLImageElement | null;
 let elemTocModal: HTMLDialogElement | null;
+let elemTocTitle: HTMLElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
@@ -22,19 +25,31 @@ export function loadModalsContent(): void {
 	elemDetailsFileDl = document.getElementById("og-details-file") as HTMLDListElement;
 	elemDetailsCoverImg = document.getElementById("og-details-cover") as HTMLImageElement;
 	elemTocModal = document.getElementById("og-toc-modal") as HTMLDialogElement;
+	elemTocTitle = document.getElementById("og-toc-title") as HTMLElement;
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
 	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
 	elemPreviewGoThereBtn = document.getElementById("og-preview-go-there") as HTMLButtonElement;
+
+	setupModalClickListener(elemDetailsModal);
+	setupModalClickListener(elemTocModal);
+	setupModalClickListener(elemPreviewModal);
 }
 
-export function setModalsLanguage(lang: string): void {
-	elemTocNav!.lang = lang;
-	elemPreviewDiv!.lang = lang;
+function setupModalClickListener(modal: HTMLDialogElement): void {
+	const inner = modal.firstElementChild as HTMLElement;
+	modal.addEventListener("click", () => modal.close());
+	inner.addEventListener("click", e => e.stopPropagation());
 }
 
-export function getModalsLanguage(): string {
-	return elemTocNav!.lang;
+export function setModalsLanguage(): void {
+	const lang = Context.epubLang;
+	if (lang) {
+		// If already set, it is perhaps set when creating the nav using its own lang
+		if (!elemTocNav!.lang) {
+			elemTocNav!.lang = lang;
+		}
+	}
 }
 
 // Details: metadata and book/file properties
@@ -113,7 +128,8 @@ function createDetailsDlItem(
 }
 
 export function showDetails(): void {
-	closeAllModals();
+	elemTocModal!.close();
+	elemPreviewModal!.close();
 	elemDetailsModal!.showModal();
 }
 
@@ -153,6 +169,9 @@ function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
 					label.replaceChildren(...grandChild.childNodes);
 					label.disabled = true;
 					label.value = "";
+					if (grandChild.lang) {
+						label.lang = grandChild.lang;
+					}
 				} else if (grandChild instanceof HTMLAnchorElement) {
 					label.replaceChildren(...grandChild.childNodes);
 					label.disabled = false;
@@ -167,6 +186,9 @@ function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
 					const [path, locationId] = href.split("#", 2);
 					label.dataset.path = path;
 					label.dataset.locationId = locationId ?? "";
+					if (grandChild.lang) {
+						label.lang = grandChild.lang;
+					}
 				} else if (grandChild instanceof HTMLOListElement) {
 					ol = grandChild;
 					remakeNavPoints(ol, navDocPath);
@@ -183,38 +205,38 @@ function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
 	}
 }
 
-export function createTocUi(
-	toc: EpubToc,
-	navigateTo: (path: string, locationId?: string) => Promise<void>,
-): void {
-	let heading = document.createElement("h1");
+export function createTocUi(toc: EpubToc): void {
 	let ol: HTMLOListElement;
+	elemTocTitle!.replaceChildren(toc_default_title);
+	let lang;
 	if (toc.kind == "ncx") {
-		heading.textContent = "Table of Contents";
 		ol = document.createElement("ol");
 		ol.append(...toc.root.children.map(createNavPointNcx));
+		lang = toc.lang;
 	} else {
 		const { nav, path } = toc;
 		const originalHeading = [...nav.children].find(
 			child => child instanceof HTMLHeadingElement,
 		);
 		if (originalHeading) {
-			heading.append(...originalHeading.childNodes);
-		} else {
-			heading.textContent = "Table of Contents";
+			elemTocTitle!.replaceChildren(...originalHeading.childNodes);
 		}
 		ol = [...nav.children].find(child => child instanceof HTMLOListElement)!;
 		remakeNavPoints(ol, path);
+		lang = nav.lang || toc.lang;
 	}
 
-	elemTocNav!.replaceChildren(heading, ol);
+	elemTocNav!.replaceChildren(ol);
+	elemTocNav!.lang = lang || Context.epubLang;
+}
 
+export function setupTocCloseListener(handler: (path: string, locationId?: string) => any) {
 	elemTocModal!.onclose = async () => {
 		const value = elemTocModal!.returnValue;
 		if (value) {
 			// If there is no hash, locationId is undefined.
 			const [path, locationId] = value.split("#", 2);
-			await navigateTo(path, locationId);
+			await handler(path, locationId);
 		}
 	};
 }
@@ -260,8 +282,10 @@ export function mostRecentNavPoint(
 }
 
 export function showToc(): void {
-	closeAllModals();
+	elemDetailsModal!.close();
+	elemPreviewModal!.close();
 	elemTocModal!.showModal();
+
 	lastMostRecentNavPoint?.scrollIntoView();
 }
 
@@ -269,23 +293,20 @@ export function showToc(): void {
 //
 
 export function showNotePreview(floatingContentRoot: HTMLElement, noteId: string): void {
-	closeAllModals();
-	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
+	elemTocModal!.close();
+	elemDetailsModal!.close();
 	elemPreviewModal!.showModal();
+
+	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
+	elemPreviewDiv!.lang = Context.spineItemLang || Context.epubLang;
 	elemPreviewGoThereBtn!.value = noteId;
 }
 
-export function setupNotePreview(handler: (targetId: string) => void): void {
+export function setupNotePreviewCloseListener(handler: (targetId: string) => any): void {
 	elemPreviewModal!.onclose = () => {
-		const ret = elemPreviewModal!.returnValue;
-		if (ret) {
-			handler(ret);
+		const value = elemPreviewModal!.returnValue;
+		if (value) {
+			handler(value);
 		}
 	};
-}
-
-function closeAllModals(): void {
-	elemTocModal!.close();
-	elemDetailsModal!.close();
-	elemPreviewModal!.close();
 }
