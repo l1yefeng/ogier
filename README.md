@@ -4,7 +4,6 @@ Small and fast.
 
 ## TODO
 
-- Highlight the target after jumping there from preview modal.
 - Handle error if given path doesn't have EPUB.
 - Dark theme.
 - New window?

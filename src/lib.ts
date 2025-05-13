@@ -37,8 +37,8 @@ import {
 	loadModalsContent,
 	mostRecentNavPoint,
 	setModalsLanguage,
-	setupNotePreviewCloseListener,
-	setupTocCloseListener,
+	setupNotePreviewGoThere,
+	setupTocGoTo,
 	showDetails,
 	showNotePreview,
 	showToc,
@@ -201,14 +201,10 @@ async function renderBookPage(
 		rs.setReadingPosition(getCurrentPosition(hostRect, bodyRect));
 	});
 
-	setupNotePreviewCloseListener(targetId => {
-		readerShadowRoot!.getElementById(targetId)?.scrollIntoView();
-	});
-
 	markSessionInProgress();
 }
 
-function createPreviewContentRoot(elemLocation: HTMLElement): HTMLElement {
+function findPreviewContent(elemLocation: HTMLElement): HTMLElement {
 	// First, try to locate a <li>, and use its content
 	let elemLi: HTMLLIElement | null = null;
 	if (elemLocation instanceof HTMLLIElement) {
@@ -217,32 +213,27 @@ function createPreviewContentRoot(elemLocation: HTMLElement): HTMLElement {
 		elemLi = elemLocation.parentElement;
 	}
 	if (elemLi) {
-		// clone the element
-		return elemLi.cloneNode(true) as HTMLLIElement;
+		return elemLi;
 	}
 
 	// Next, use its parent if it's a <a>
 	if (elemLocation instanceof HTMLAnchorElement) {
 		const parent = elemLocation.parentElement;
 		if (parent) {
-			return parent.cloneNode(true) as HTMLElement;
+			return parent;
 		}
 	}
 
-	return elemLocation.cloneNode(true) as HTMLElement;
+	return elemLocation;
 }
 
 function createSamePageLocationPreviewContent(
 	anchor: HTMLElement,
-	id: string,
-): HTMLElement | null {
-	const elemLocation = readerShadowRoot!.getElementById(id);
-	if (!elemLocation) {
-		return null;
-	}
-
-	const previewContentRoot = createPreviewContentRoot(elemLocation);
-	for (const elem of previewContentRoot.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+	elemLocation: HTMLElement,
+): [HTMLElement, HTMLElement] | null {
+	const elemToPreview = findPreviewContent(elemLocation);
+	const clone = elemToPreview.cloneNode(true) as HTMLElement;
+	for (const elem of clone.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
 		const idPointedByElem = anchoredSamePageLocation(elem)!;
 		if (isLocationNear(idPointedByElem, anchor)) {
 			const subs = document.createElement("span");
@@ -253,20 +244,29 @@ function createSamePageLocationPreviewContent(
 		}
 	}
 
-	if (!previewContentRoot.textContent?.trim()) {
+	if (!clone.textContent?.trim()) {
 		return null;
 	}
 
-	return previewContentRoot;
+	return [clone, elemToPreview];
 }
 
-function previewSamePageLocation(anchor: HTMLElement, id: string): void {
-	const elem = readerShadowRoot!.getElementById(id);
-	if (elem) {
-		const contentRoot = createSamePageLocationPreviewContent(anchor, id);
-		if (contentRoot) {
-			showNotePreview(contentRoot, id);
-		}
+function previewSamePageLocation(anchor: HTMLElement, elemNoteId: string): void {
+	const elemNote = readerShadowRoot!.getElementById(elemNoteId);
+	if (!elemNote) {
+		return;
+	}
+	const result = createSamePageLocationPreviewContent(anchor, elemNote);
+	if (result) {
+		const [clone, original] = result;
+		showNotePreview(clone);
+		setupNotePreviewGoThere(() => {
+			elemNote.scrollIntoView();
+			original.classList.add("og-attention");
+			window.setTimeout(() => {
+				original.classList.remove("og-attention");
+			}, 600);
+		});
 	}
 }
 
@@ -295,9 +295,9 @@ function handleClickInReader(event: PointerEvent): void {
 	}
 	if (elemAnchor) {
 		event.preventDefault();
-		const samePageId = anchoredSamePageLocation(elemAnchor);
-		if (samePageId) {
-			previewSamePageLocation(elemAnchor, samePageId);
+		const elemNoteId = anchoredSamePageLocation(elemAnchor);
+		if (elemNoteId) {
+			previewSamePageLocation(elemAnchor, elemNoteId);
 		} else {
 			const href = elemAnchor.href;
 			if (href.startsWith("epub://")) {
@@ -357,7 +357,7 @@ async function initToc(): Promise<void> {
 		return;
 	}
 	createTocUi(result);
-	setupTocCloseListener(navigateTo);
+	setupTocGoTo(navigateTo);
 
 	getCurrentWebviewWindow().listen("menu/f_toc", showToc);
 }

@@ -230,13 +230,13 @@ export function createTocUi(toc: EpubToc): void {
 	elemTocNav!.lang = lang || Context.epubLang;
 }
 
-export function setupTocCloseListener(handler: (path: string, locationId?: string) => any) {
+export function setupTocGoTo(navigate: (path: string, locationId?: string) => any) {
 	elemTocModal!.onclose = async () => {
 		const value = elemTocModal!.returnValue;
 		if (value) {
 			// If there is no hash, locationId is undefined.
 			const [path, locationId] = value.split("#", 2);
-			await handler(path, locationId);
+			await navigate(path, locationId);
 		}
 	};
 }
@@ -292,21 +292,20 @@ export function showToc(): void {
 // Note preview
 //
 
-export function showNotePreview(floatingContentRoot: HTMLElement, noteId: string): void {
+export function showNotePreview(floatingContentRoot: HTMLElement): void {
 	elemTocModal!.close();
 	elemDetailsModal!.close();
 	elemPreviewModal!.showModal();
 
 	elemPreviewDiv!.replaceChildren(...floatingContentRoot.childNodes);
 	elemPreviewDiv!.lang = Context.spineItemLang || Context.epubLang;
-	elemPreviewGoThereBtn!.value = noteId;
 }
 
-export function setupNotePreviewCloseListener(handler: (targetId: string) => any): void {
+export function setupNotePreviewGoThere(navigate: () => any): void {
 	elemPreviewModal!.onclose = () => {
 		const value = elemPreviewModal!.returnValue;
 		if (value) {
-			handler(value);
+			navigate();
 		}
 	};
 }

@@ -76,6 +76,9 @@ export class Styler {
 			a {
 				text-decoration: none;
 			}
+			.og-attention {
+				background-color: #fbe54e44;
+			}
 		`;
 		if (this.#customStyles) {
 			const styles = this.#customStyles;
