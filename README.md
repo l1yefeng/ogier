@@ -4,14 +4,14 @@ Small and fast.
 
 ## TODO
 
-- Handle error if given path doesn't have EPUB.
+- Fetch font from archive
+- Other methods to customize reader (when UI is too narrow).
 - Dark theme.
 - New window?
-- Other methods to customize reader (when UI is too narrow).
 - Optimize: cache; https://crates.io/crates/lru
 - Optimize: css loading
 - Use keyup and repeat. Make repeat count the distance to jump.
-- Fetch font from archive
+- Better alert when filepath arg can't be opened. Currently there is only a log.
 
 ## App persistent state
 

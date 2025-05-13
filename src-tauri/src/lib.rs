@@ -600,7 +600,9 @@ pub fn run(filepath: Option<PathBuf>) {
             if let Some(filepath) = filepath {
                 log::debug!(" with {}", filepath.to_string_lossy());
                 let state = app.state::<AppState>();
-                book_open(state.lock().as_mut().unwrap(), &filepath)?;
+                if let Err(err) = book_open(state.lock().as_mut().unwrap(), &filepath) {
+                    log::error!("failed to open: {}", err);
+                }
             }
 
             let state = app.state::<AppState>();
