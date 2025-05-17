@@ -16,7 +16,6 @@ let elemTocTitle: HTMLElement | null;
 let elemTocNav: HTMLElement | null;
 let elemPreviewModal: HTMLDialogElement | null;
 let elemPreviewDiv: HTMLDivElement | null;
-let elemPreviewGoThereBtn: HTMLButtonElement | null;
 
 export function loadModalsContent(): void {
 	elemDetailsModal = document.getElementById("og-details-modal") as HTMLDialogElement;
@@ -29,7 +28,6 @@ export function loadModalsContent(): void {
 	elemTocNav = document.getElementById("og-toc-nav") as HTMLElement;
 	elemPreviewModal = document.getElementById("og-preview-modal") as HTMLDialogElement;
 	elemPreviewDiv = document.getElementById("og-preview-div") as HTMLDivElement;
-	elemPreviewGoThereBtn = document.getElementById("og-preview-go-there") as HTMLButtonElement;
 
 	setupModalClickListener(elemDetailsModal);
 	setupModalClickListener(elemTocModal);
