@@ -208,6 +208,9 @@ export function createTocUi(toc: EpubToc): void {
 	elemTocTitle!.replaceChildren(toc_default_title);
 	let lang;
 	if (toc.kind == "ncx") {
+		if (toc.root.label) {
+			elemTocTitle!.replaceChildren(toc.root.label);
+		}
 		ol = document.createElement("ol");
 		ol.append(...toc.root.children.map(createNavPointNcx));
 		lang = toc.lang;

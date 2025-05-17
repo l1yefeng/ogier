@@ -368,17 +368,21 @@ fn get_resource(state: State<AppState>, path: PathBuf) -> CmdResult<String> {
 
 #[tauri::command]
 fn get_toc(state: State<AppState>) -> CmdResult<EpubToc> {
-    let (version, toc) = {
+    let (version, toc, toc_title) = {
         let state_guard = state.lock().unwrap();
         let book = state_guard.book.as_ref().unwrap();
         // NOTE: this is the legacy NCX toc
-        (book.version.clone(), book.toc.clone())
+        (
+            book.version.clone(),
+            book.toc.clone(),
+            book.toc_title.clone(),
+        )
     };
 
     if !toc.is_empty() {
         return Ok(EpubToc::Ncx {
             root: MyNavPoint(NavPoint {
-                label: String::new(),
+                label: toc_title,
                 content: PathBuf::new(),
                 children: toc,
                 play_order: 0,
