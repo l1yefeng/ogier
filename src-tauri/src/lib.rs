@@ -1,4 +1,4 @@
-mod css;
+mod alter;
 mod error;
 mod menus;
 mod mepub;
@@ -19,7 +19,7 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
 
-use css::regulate_css;
+use alter::regulate_css;
 use error::Error;
 use mepub::{EpubDetails, EpubFileInfo, EpubToc, MyNavPoint, Navigation, SpineItem};
 use prefs::{FontPrefer, FontSubstitute};
