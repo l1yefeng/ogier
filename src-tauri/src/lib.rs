@@ -57,6 +57,9 @@ type AppState = Mutex<AppData>;
 const PROGRESS_STORE: &str = "progress.json";
 const PREFS_STORE: &str = "prefs.json";
 
+pub const MIMETYPE_XHTML: &str = "application/xhtml+xml";
+pub const MIMETYPE_SVG: &str = "image/svg+xml";
+
 // Helper functions, that tauri::commands depends on.
 // Don't lock state within. Receive state as argument.
 
@@ -69,10 +72,19 @@ fn book_get_current(state: &mut MutexGuard<'_, AppData>) -> CmdResult<SpineItem>
     let Some(path) = book.get_current_path() else {
         return Err(Error::Epub(DocError::InvalidEpub));
     };
+    let Some(mimetype) = book.get_current_mime() else {
+        return Err(Error::Epub(DocError::InvalidEpub));
+    };
+    if !mimetype.eq_ignore_ascii_case(MIMETYPE_SVG)
+        && !mimetype.eq_ignore_ascii_case(MIMETYPE_XHTML)
+    {
+        return Err(Error::Epub(DocError::InvalidEpub));
+    }
     Ok(SpineItem {
         position,
         path,
         text,
+        mimetype,
     })
 }
 
@@ -95,7 +107,7 @@ fn book_find_nav_doc(state: &mut MutexGuard<'_, AppData>) -> Option<(PathBuf, St
         .resources
         .iter()
         .filter_map(|kv| {
-            if kv.1.1 == "application/xhtml+xml" {
+            if kv.1.1 == MIMETYPE_XHTML {
                 Some(kv.1.0.clone())
             } else {
                 None

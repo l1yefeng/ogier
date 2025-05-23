@@ -120,7 +120,7 @@ async function renderBookPage(
 	readerShadowRoot!.replaceChildren();
 
 	const parser = new DOMParser();
-	const pageDoc = parser.parseFromString(spineItem.text, "application/xhtml+xml");
+	const pageDoc = parser.parseFromString(spineItem.text, spineItem.mimetype);
 	Context.spineItemLang = pageDoc.documentElement.lang;
 	elemReaderHost!.lang = Context.spineItemLang || Context.epubLang;
 	const pageBody = pageDoc.body;

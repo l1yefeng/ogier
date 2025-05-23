@@ -47,6 +47,7 @@ pub struct SpineItem {
     pub position: usize,
     pub path: PathBuf,
     pub text: String,
+    pub mimetype: String,
 }
 
 pub type Metadata = HashMap<String, Vec<String>>;

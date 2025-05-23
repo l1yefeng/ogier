@@ -11,6 +11,8 @@ export interface SpineItemData {
 	path: string;
 	// File content
 	text: string;
+	// Mimetype
+	mimetype: "application/xhtml+xml" | "image/svg+xml";
 }
 
 export enum CustomStyleKey {

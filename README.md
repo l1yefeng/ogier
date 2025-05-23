@@ -4,10 +4,15 @@ Small and fast.
 
 ## TODO
 
+- SVG content.
+- CSS processing in XHTML.
+- Welcome screen code cleanup - BUG: click-to-open visible.
 - Fetch font from archive
 - Other methods to customize reader (when UI is too narrow).
 - Dark theme.
 - New window?
+- Welcome screen list recent files.
+- Optimize: Open "Wild Life" faster.
 - Optimize: cache; https://crates.io/crates/lru
 - Optimize: css loading
 - Use keyup and repeat. Make repeat count the distance to jump.
