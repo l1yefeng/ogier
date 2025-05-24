@@ -4,8 +4,7 @@ Small and fast.
 
 ## TODO
 
-- SVG content.
-- CSS processing in XHTML.
+- SVG content - find a test case.
 - Welcome screen code cleanup - BUG: click-to-open visible.
 - Fetch font from archive
 - Other methods to customize reader (when UI is too narrow).

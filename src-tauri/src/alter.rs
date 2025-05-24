@@ -1,5 +1,11 @@
+use std::io;
+
 use arrayvec::ArrayString;
 use cssparser::{ParseError, Parser, ParserInput, ToCss, Token};
+use quick_xml::{
+    Reader, Writer,
+    events::{BytesText, Event, attributes::Attribute},
+};
 
 use crate::prefs::FontSubstitute;
 
@@ -143,7 +149,7 @@ fn transform_css<'i>(
     Ok(())
 }
 
-pub fn regulate_css(css: &str, font_substitute: &FontSubstitute) -> Option<String> {
+pub fn alter_css(css: &str, font_substitute: &FontSubstitute) -> Option<String> {
     let mut output = String::new();
 
     let mut input = ParserInput::new(css);
@@ -156,35 +162,128 @@ pub fn regulate_css(css: &str, font_substitute: &FontSubstitute) -> Option<Strin
     Some(output)
 }
 
+fn transform_xhtml(
+    xhtml: &str,
+    font_substitute: &FontSubstitute,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut reader = Reader::from_str(xhtml);
+    reader.config_mut().trim_text(true);
+
+    let mut writer = Writer::new(io::Cursor::new(Vec::new()));
+
+    let mut is_css = false;
+    loop {
+        let evt = reader.read_event()?;
+        let mut replace = None;
+        match evt {
+            // done
+            Event::Eof => return Ok(writer.into_inner().into_inner()),
+
+            Event::Start(ref e) if e.name().as_ref() == b"style" => {
+                is_css = true;
+            }
+            Event::Text(ref e) if is_css => {
+                replace = e
+                    .unescape()
+                    .map_or(None, |css| Some(css))
+                    .and_then(|css| alter_css(&css, font_substitute))
+                    .map(|css| Event::Text(BytesText::from_escaped(css)));
+            }
+            Event::End(_) if is_css => {
+                is_css = false;
+            }
+
+            Event::Start(ref e) => {
+                if let Ok(Some(attr)) = e.try_get_attribute("style") {
+                    replace = attr
+                        .unescape_value()
+                        .map_or(None, |css| Some(css))
+                        .and_then(|css| alter_css(&css, font_substitute))
+                        .map(|css| {
+                            let mut start = e.to_owned();
+                            start.clear_attributes();
+                            e.attributes().for_each(|attr| {
+                                if let Ok(attr) = attr {
+                                    if attr.key.0.eq_ignore_ascii_case(b"style") {
+                                        start.push_attribute(Attribute::from((
+                                            "style",
+                                            css.as_str(),
+                                        )));
+                                    } else {
+                                        start.push_attribute(attr);
+                                    }
+                                }
+                            });
+                            Event::Start(start)
+                        });
+                }
+            }
+            _ => {}
+        }
+        let _ = writer.write_event(replace.unwrap_or_else(|| evt.into_owned()));
+    }
+}
+
+pub fn alter_xhtml(xhtml: &str, font_substitute: &FontSubstitute) -> Option<String> {
+    let Ok(output) = transform_xhtml(xhtml, font_substitute) else {
+        return None;
+    };
+    String::from_utf8(output).map_or(None, |s| Some(s))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
-    use crate::regulate_css;
+    use crate::{alter::alter_xhtml, alter_css};
 
     #[test]
-    fn test_regulate_css_font_size() {
+    fn test_alter_css_font_size() {
         let input =
             "body { font-size: 16px; margin: 32px; } p { padding: 8px; } a { font-size: medium; }";
         let expected = "body { font-size: 1.00rem; margin: 2.00rem; } p { padding: 0.50rem; } a { font-size: 1.00rem; }";
-        assert_eq!(regulate_css(input, &HashMap::new()).unwrap(), expected);
+        assert_eq!(alter_css(input, &HashMap::new()).unwrap(), expected);
     }
 
     #[test]
-    fn test_regulate_css_nesting() {
+    fn test_alter_css_nesting() {
         let input = "body { color: green; p { color: red; a { color: blue } } }";
         let expected = "body { color: green; p { color: red; a { color: blue } } }";
-        assert_eq!(regulate_css(input, &HashMap::new()).unwrap(), expected);
+        assert_eq!(alter_css(input, &HashMap::new()).unwrap(), expected);
     }
 
     #[test]
-    fn test_regulate_css_font_substitute() {
+    fn test_alter_css_font_substitute() {
         let input = ":host { font-family: sans-serif } head {}";
         let expected = ":host { font-family: X } head {}";
         let map = HashMap::from_iter(vec![
             (String::from("sans-serif"), String::from("X")),
             (String::from("head"), String::from("Y")),
         ]);
-        assert_eq!(regulate_css(input, &map).unwrap(), expected);
+        assert_eq!(alter_css(input, &map).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_alter_xhtml_style() {
+        let input = r#"<html><head>
+            <style>
+                p {
+                    color: blue;
+                    line-height: 1;
+                }
+            </style>
+        </head></html>"#;
+        let expected = r#"<html><head><style>p {
+                    color: blue;
+                    line-height: calc(var(--og-line-height-scale) * 1.00);
+                }</style></head></html>"#;
+        assert_eq!(alter_xhtml(input, &HashMap::new()).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_alter_xhtml_style_inline() {
+        let input = "<html><body style=\"line-height:1\"></body></html>";
+        let expected = "<html><body style=\"line-height:calc(var(--og-line-height-scale) * 1.00)\"></body></html>";
+        assert_eq!(alter_xhtml(input, &HashMap::new()).unwrap(), expected);
     }
 }

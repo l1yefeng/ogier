@@ -19,7 +19,7 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
 
-use alter::regulate_css;
+use alter::{alter_css, alter_xhtml};
 use error::Error;
 use mepub::{EpubDetails, EpubFileInfo, EpubToc, MyNavPoint, Navigation, SpineItem};
 use prefs::{FontPrefer, FontSubstitute};
@@ -67,7 +67,7 @@ pub const MIMETYPE_SVG: &str = "image/svg+xml";
 fn book_get_current(state: &mut MutexGuard<'_, AppData>) -> CmdResult<SpineItem> {
     let book = state.book.as_mut().unwrap();
     let text = book.get_current_with_epub_uris()?;
-    let text = String::from_utf8(text)?;
+    let mut text = String::from_utf8(text)?;
     let position = book.get_current_page();
     let Some(path) = book.get_current_path() else {
         return Err(Error::Epub(DocError::InvalidEpub));
@@ -80,6 +80,12 @@ fn book_get_current(state: &mut MutexGuard<'_, AppData>) -> CmdResult<SpineItem>
     {
         return Err(Error::Epub(DocError::InvalidEpub));
     }
+
+    if mimetype.eq_ignore_ascii_case(MIMETYPE_XHTML) {
+        let font_substitute = &state.prefs_font_substitute;
+        text = alter_xhtml(&text, font_substitute).unwrap_or(text);
+    }
+
     Ok(SpineItem {
         position,
         path,
@@ -368,7 +374,7 @@ fn get_resource(state: State<AppState>, path: PathBuf) -> CmdResult<String> {
         {
             let state_guard = state.lock().unwrap();
             let font_substitute = &state_guard.prefs_font_substitute;
-            Ok(regulate_css(&content, font_substitute).unwrap_or(content))
+            Ok(alter_css(&content, font_substitute).unwrap_or(content))
         } else {
             Ok(content)
         }
