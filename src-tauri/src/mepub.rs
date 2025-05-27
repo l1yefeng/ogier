@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 
-use epub::doc::NavPoint;
+use epub::doc::{MetadataItem, MetadataRefinement, NavPoint};
 use serde::{Serialize, ser::SerializeStruct};
 
 #[derive(Serialize)]
@@ -17,22 +16,56 @@ impl Serialize for MyNavPoint {
     where
         S: serde::Serializer,
     {
+        let it = &self.0;
         let mut state = serializer.serialize_struct("NavPoint", 4)?;
-        state.serialize_field("label", &self.0.label)?;
-        state.serialize_field(
-            "content",
-            &self.0.content.to_string_lossy().replace('\\', "/"),
-        )?;
-        state.serialize_field("playOrder", &self.0.play_order)?;
+        state.serialize_field("label", &it.label)?;
+        state.serialize_field("content", &it.content.to_string_lossy().replace('\\', "/"))?;
+        state.serialize_field("playOrder", &it.play_order)?;
         state.serialize_field(
             "children",
-            &self
-                .0
-                .children
+            &it.children
                 .iter()
-                .map(|x| MyNavPoint(x.clone()))
+                .map(|p| MyNavPoint(p.clone()))
                 .collect::<Vec<_>>(),
         )?;
+        state.end()
+    }
+}
+
+pub struct MyMetadataItem(pub MetadataItem);
+pub struct MyMetadataRefinement(pub MetadataRefinement);
+
+impl Serialize for MyMetadataItem {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let it = &self.0;
+        let mut state = serializer.serialize_struct("MetadataItem", 4)?;
+        state.serialize_field("property", &it.property)?;
+        state.serialize_field("value", &it.value)?;
+        state.serialize_field("lang", &it.lang)?;
+        state.serialize_field(
+            "refined",
+            &it.refined
+                .iter()
+                .map(|r| MyMetadataRefinement(r.clone()))
+                .collect::<Vec<_>>(),
+        )?;
+        state.end()
+    }
+}
+impl Serialize for MyMetadataRefinement {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let it = &self.0;
+        let mut state = serializer.serialize_struct("MetadataRefinement", 4)?;
+        state.serialize_field("property", &it.property)?;
+        state.serialize_field("value", &it.value)?;
+        state.serialize_field("lang", &it.lang)?;
+        state.serialize_field("scheme", &it.scheme)?;
         state.end()
     }
 }
@@ -50,8 +83,6 @@ pub struct SpineItem {
     pub mimetype: String,
 }
 
-pub type Metadata = HashMap<String, Vec<String>>;
-
 #[derive(Serialize, Clone)]
 pub struct EpubFileInfo {
     pub path: PathBuf,
@@ -65,7 +96,7 @@ pub struct EpubDetails {
     #[serde(rename = "fileInfo")]
     pub file_info: EpubFileInfo,
 
-    pub metadata: Metadata,
+    pub metadata: Vec<MyMetadataItem>,
     #[serde(rename = "spineLength")]
     pub spine_length: usize,
     #[serde(rename = "displayTitle")]

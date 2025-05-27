@@ -336,9 +336,7 @@ async function initDetails(): Promise<void> {
 		return;
 	}
 
-	if (details.metadata.language) {
-		Context.epubLang = details.metadata.language[0] ?? "";
-	}
+	Context.epubLang = details.metadata.find(item => item.property == "language")?.value ?? "";
 	setModalsLanguage();
 	Context.spineLength = details.spineLength;
 	createBookDetailsUi(details);

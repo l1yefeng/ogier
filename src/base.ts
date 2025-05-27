@@ -42,7 +42,18 @@ export type EpubToc =
 			lang: string;
 	  };
 
-export type EpubMetadata = Record<string, string[]>;
+interface EpubExprBase {
+	property: string;
+	value: string;
+	lang?: string;
+}
+export interface EpubMetadataRefinement extends EpubExprBase {
+	scheme?: string;
+}
+export interface EpubMetadataItem extends EpubExprBase {
+	refined: EpubMetadataRefinement[];
+}
+export type EpubMetadata = EpubMetadataItem[];
 
 export interface EpubFileInfo {
 	path: string;

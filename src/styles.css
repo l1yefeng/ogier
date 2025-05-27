@@ -239,6 +239,23 @@ dialog {
 			}
 		}
 	}
+
+	.og-details-refinement {
+		cursor: help;
+		&:hover {
+			text-decoration: underline;
+		}
+	}
+
+	.og-details-mono-font {
+		font-family: monospace;
+		font-size: 0.9rem;
+		line-height: 1.33;
+	}
+
+	.og-capitalize {
+		text-transform: capitalize;
+	}
 }
 
 /* Preview modal */

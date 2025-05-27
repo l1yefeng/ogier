@@ -2,7 +2,7 @@
  * Parts of the UI that compose the details modal, TOC modal, and note preview modal.
  */
 
-import { EpubDetails, EpubNavPoint, EpubToc } from "./base";
+import { EpubDetails, EpubMetadataItem, EpubNavPoint, EpubToc } from "./base";
 import { Context } from "./context";
 import { toc_default_title } from "./strings.json";
 
@@ -63,11 +63,7 @@ export function createBookDetailsUi(details: EpubDetails): void {
 		elemDetailsCoverImg!.replaceWith(h);
 	}
 
-	elemDetailsBookDl!.replaceChildren(
-		...Object.entries(details.metadata).flatMap(([key, values]) =>
-			createDetailsDlItem(key, values),
-		),
-	);
+	elemDetailsBookDl!.replaceChildren(...details.metadata.flatMap(createDetailsDlItemRich));
 
 	elemDetailsMetadataPre!.textContent = "TO DO";
 
@@ -94,34 +90,62 @@ function timeStringFromMs(ms: number): string {
 	return date.toLocaleString();
 }
 
-function createDetailsDlItem(
-	prop: string,
-	value: string | string[],
-): [HTMLElement, HTMLElement] {
+function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
 	const dt = document.createElement("dt");
 	const dd = document.createElement("dd");
 
-	dt.textContent = prop;
-
-	if (value instanceof Array) {
-		if (value.length > 1) {
-			// use a list
-			const ol = document.createElement("ol");
-			dd.appendChild(ol);
-			ol.append(
-				...value.map(v => {
-					const li = document.createElement("li");
-					li.textContent = v;
-					return li;
-				}),
-			);
-		} else {
-			dd.textContent = value[0];
+	// dt
+	const pp = data.property.split(":");
+	if (pp.length > 1 && pp[0] == "dcterms") {
+		pp.shift();
+	}
+	if (pp.length != 1 && pp.length != 2) {
+		return [];
+	}
+	if (pp.length == 1 && pp[0] == "cover") {
+		// TODO: better to know that it's EPUB2 XHTML1.1 <meta>
+		return [];
+	}
+	let titleHtml = `<span class="og-capitalize">${pp[pp.length - 1]}</span>`;
+	if (pp.length == 1) {
+		if (pp[0] == "language" || pp[0] == "identifier") {
+			dd.classList.add("og-details-mono-font");
 		}
 	} else {
-		dd.textContent = value;
+		titleHtml += ` <sup><code>\\${pp[0]}</code></sup>`;
+	}
+	dt.innerHTML = titleHtml;
+
+	// dd
+	if (data.lang) {
+		dd.lang = data.lang;
+	} else if (Context.epubLang) {
+		if (
+			["contributor", "creator", "description", "publisher", "title"].includes(data.property)
+		) {
+			dd.lang = Context.epubLang;
+		}
+	}
+	dd.innerHTML = data.value;
+	for (const refine of data.refined) {
+		const chip = document.createElement("code");
+		chip.classList.add("og-details-refinement");
+		chip.textContent = refine.property;
+		chip.title = refine.value;
+		if (refine.scheme) {
+			chip.title += ` - ${refine.scheme}`;
+		}
+		dt.append(" ", chip);
 	}
 
+	return [dt, dd];
+}
+
+function createDetailsDlItem(property: string, value: string): [HTMLElement, HTMLElement] {
+	const dt = document.createElement("dt");
+	const dd = document.createElement("dd");
+	dt.textContent = property;
+	dd.textContent = value;
 	return [dt, dd];
 }
 

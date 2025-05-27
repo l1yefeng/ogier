@@ -13,7 +13,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
-use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint};
+use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint, ResourceItem};
 use tauri::{AppHandle, Manager, State, Window};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
@@ -21,7 +21,9 @@ use twox_hash::XxHash64;
 
 use alter::{alter_css, alter_xhtml};
 use error::Error;
-use mepub::{EpubDetails, EpubFileInfo, EpubToc, MyNavPoint, Navigation, SpineItem};
+use mepub::{
+    EpubDetails, EpubFileInfo, EpubToc, MyMetadataItem, MyNavPoint, Navigation, SpineItem,
+};
 use prefs::{FontPrefer, FontSubstitute};
 
 type Epub = EpubDoc<BufReader<File>>;
@@ -109,26 +111,11 @@ fn book_navigate(state: &mut MutexGuard<'_, AppData>, command: Navigation) -> Cm
 /// If a document contains one, returns its path and its content.
 fn book_find_nav_doc(state: &mut MutexGuard<'_, AppData>) -> Option<(PathBuf, String)> {
     let book = state.book.as_mut().unwrap();
-    let resources: Vec<PathBuf> = book
-        .resources
-        .iter()
-        .filter_map(|kv| {
-            if kv.1.1 == MIMETYPE_XHTML {
-                Some(kv.1.0.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
-    resources.into_iter().find_map(|path| {
-        let content = book.get_resource_str_by_path(&path)?;
-        const MARKER: &str = "epub:type=\"toc\"";
-        if content.contains(MARKER) {
-            Some((path, content))
-        } else {
-            None
-        }
-    })
+    let id = book.get_nav_id()?;
+    let ResourceItem { path, .. } = book.resources.get(&id)?;
+    let path = path.clone();
+    let content = book.get_resource_str_by_path(&path)?;
+    Some((path, content))
 }
 
 /// Uses state.book. Also modifies progress store.
@@ -221,7 +208,7 @@ fn post_book_open(window: &Window, state: &MutexGuard<'_, AppData>) -> CmdResult
     };
 
     // set window title with book title
-    let title = match book.mdata("title") {
+    let title = match book.get_title() {
         Some(book_title) => format!("{} - OgierEPUB", book_title),
         None => String::from("OgierEPUB"),
     };
@@ -472,25 +459,32 @@ fn get_details(state: State<AppState>) -> CmdResult<EpubDetails> {
         (book.spine.len(), book.metadata.clone(), book.get_cover())
     };
 
-    let title = metadata.get("title").and_then(|values| values.first());
-    let display_title = match title {
-        Some(title) => title.clone(),
-        None => String::from(
-            file_info
-                .path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or_default(),
-        ),
-    };
+    let display_title = metadata
+        .iter()
+        .find(|item| item.property == "title")
+        .map_or_else(
+            || {
+                String::from(
+                    file_info
+                        .path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or_default(),
+                )
+            },
+            |item| item.value.clone(),
+        );
 
     let cover_base64 = cover
-        .map(|c_m| resource_base64_encode(c_m.0, c_m.1))
+        .map(|(content, mime)| resource_base64_encode(content, mime))
         .unwrap_or_default();
 
     Ok(EpubDetails {
         file_info,
-        metadata,
+        metadata: metadata
+            .into_iter()
+            .map(|item| MyMetadataItem(item))
+            .collect(),
         spine_length,
         display_title,
         cover_base64,

@@ -1043,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "epub"
 version = "2.1.4"
-source = "git+https://github.com/danigm/epub-rs?rev=b06e09213a0cd0580a3fcc15d70664cda70a78b8#b06e09213a0cd0580a3fcc15d70664cda70a78b8"
+source = "git+https://github.com/danigm/epub-rs?rev=27eeef34a8987dbbd86260deff994cfde34a4846#27eeef34a8987dbbd86260deff994cfde34a4846"
 dependencies = [
  "percent-encoding",
  "regex",
