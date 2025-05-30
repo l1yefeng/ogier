@@ -74,6 +74,11 @@ fn book_get_current(state: &mut MutexGuard<'_, AppData>) -> CmdResult<SpineItem>
     let Some(path) = book.get_current_path() else {
         return Err(Error::Epub(DocError::InvalidEpub));
     };
+    let path = if cfg!(windows) {
+        path.to_string_lossy().replace('\\', "/")
+    } else {
+        path.to_string_lossy().to_string()
+    };
     let Some(mimetype) = book.get_current_mime() else {
         return Err(Error::Epub(DocError::InvalidEpub));
     };
@@ -398,6 +403,11 @@ fn get_toc(state: State<AppState>) -> CmdResult<EpubToc> {
     if let EpubVersion::Version3_0 = version {
         let mut state_guard = state.lock().unwrap();
         if let Some((path, nav_doc_content)) = book_find_nav_doc(&mut state_guard) {
+            let path = if cfg!(windows) {
+                path.to_string_lossy().replace('\\', "/")
+            } else {
+                path.to_string_lossy().to_string()
+            };
             return Ok(EpubToc::Nav {
                 path,
                 xhtml: nav_doc_content,

@@ -1,12 +1,10 @@
-use std::path::PathBuf;
-
 use epub::doc::{MetadataItem, MetadataRefinement, NavPoint};
 use serde::{Serialize, ser::SerializeStruct};
 
 #[derive(Serialize)]
 pub enum EpubToc {
     Ncx { root: MyNavPoint },
-    Nav { path: PathBuf, xhtml: String },
+    Nav { path: String, xhtml: String },
 }
 
 pub struct MyNavPoint(pub NavPoint);
@@ -19,7 +17,11 @@ impl Serialize for MyNavPoint {
         let it = &self.0;
         let mut state = serializer.serialize_struct("NavPoint", 4)?;
         state.serialize_field("label", &it.label)?;
-        state.serialize_field("content", &it.content.to_string_lossy().replace('\\', "/"))?;
+        let mut content = it.content.to_string_lossy().to_string();
+        if cfg!(windows) {
+            content = content.replace('\\', "/");
+        }
+        state.serialize_field("content", &content)?;
         state.serialize_field("playOrder", &it.play_order)?;
         state.serialize_field(
             "children",
@@ -78,14 +80,14 @@ pub enum Navigation {
 #[derive(Serialize)]
 pub struct SpineItem {
     pub position: usize,
-    pub path: PathBuf,
+    pub path: String,
     pub text: String,
     pub mimetype: String,
 }
 
 #[derive(Serialize, Clone)]
 pub struct EpubFileInfo {
-    pub path: PathBuf,
+    pub path: std::path::PathBuf,
     pub size: u64,
     pub created: u128,  // 0 if unavailable
     pub modified: u128, // 0 if unavailable
