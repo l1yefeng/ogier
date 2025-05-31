@@ -1,6 +1,7 @@
+import { Store } from "@tauri-apps/plugin-store";
+
 import { clamp, CustomStyleKey, CustomStyles, FontPrefer } from "./base";
 import * as rs from "./invoke";
-import { load } from "@tauri-apps/plugin-store";
 
 export class Styler {
 	#readerRoot: ShadowRoot;
@@ -10,8 +11,8 @@ export class Styler {
 	#styleElemsCss: CSSStyleSheet;
 	#linkedCssResources: Record<string, CSSStyleSheet>;
 
-	#fontPreference: FontPrefer = null;
 	#filewiseStyles: CustomStyles | null = null;
+	#utf8Encoder = new TextEncoder();
 
 	constructor(readerRoot: ShadowRoot) {
 		this.#readerRoot = readerRoot;
@@ -25,28 +26,52 @@ export class Styler {
 			this.#filewiseStylesCss,
 			this.#styleElemsCss,
 		];
-
-		this.#loadAppPrefs();
 	}
 
-	// FIXME set from lib.ts and organize
-	async #loadAppPrefs(): Promise<void> {
-		const store = await load("prefs.json");
+	async loadAppPrefs(store: Store): Promise<void> {
+		// TODO handle malformed prefs json
 		const fontSubstitute = await store.get<Record<string, string>>("font.substitute");
-		console.debug("font.substitute", fontSubstitute);
+		const fontPrefer = await store.get<FontPrefer>("font.prefer");
 
 		let css = ":host {";
-		const encoder = new TextEncoder();
+
+		// font substitution
 		if (fontSubstitute) {
 			Object.entries(fontSubstitute).forEach(([key, value]) => {
-				let enc = "";
-				const u8Arr = encoder.encode(key);
-				u8Arr.forEach(b => {
-					enc += b.toString(16).padStart(2, "0");
-				});
-				css += `--og-font-${enc}: ${value};\n`;
+				const property = this.#customPropertyForFont(key);
+				css += `${property}: "${value}";\n`;
 			});
 		}
+
+		// font prefer
+		if (fontPrefer) {
+			// e.g., if prefers serif, and when the font choice falls back to
+			// sans-serif, users should see serif font instead of sans-serif.
+			// the substitution of sans-serif won't matter.
+			// the substitution of serif should be used if set.
+			const property = this.#customPropertyForFont(
+				fontPrefer == "serif" ? "sans-serif" : "serif",
+			);
+			let value = fontSubstitute && fontSubstitute[fontPrefer];
+			if (!value) {
+				value = fontPrefer;
+			}
+			// TODO: if substitution font isn't found, it still uses sans-serif.
+			css += `${property}: "${value}";\n`;
+
+			// elements that don't specify font inherit the value here
+			css += `font-family: "${value}", ${fontPrefer};\n`;
+		} else {
+			css += `font-family: initial;\n`;
+		}
+
+		// builtin
+		css += `
+            img { max-width: 100%; }
+			a { text-decoration: none; }
+			.og-attention { background-color: #fbe54e44; }
+		`;
+
 		css += "}";
 
 		await this.#appCss.replace(css);
@@ -91,28 +116,13 @@ export class Styler {
 		this.#styleElemsCss.replace(css);
 	}
 
-	set fontPreference(value: FontPrefer) {
-		this.#fontPreference = value;
-		this.#setFilewiseStyleCss();
-	}
-
 	set filewiseStyles(value: CustomStyles) {
 		this.#filewiseStyles = value;
 		this.#setFilewiseStyleCss();
 	}
 
 	#setFilewiseStyleCss(): void {
-		let hostStyle = `
-            img {
-                max-width: 100%;
-            }
-			a {
-				text-decoration: none;
-			}
-			.og-attention {
-				background-color: #fbe54e44;
-			}
-		`;
+		let hostStyle = "";
 		if (this.#filewiseStyles) {
 			const styles = this.#filewiseStyles;
 			const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
@@ -127,7 +137,7 @@ export class Styler {
 			const host = this.#readerRoot.host as HTMLElement;
 			host.style.paddingInline = inlineMarginCss;
 
-			hostStyle += `
+			hostStyle = `
             :host {
                 --og-line-height-scale: ${lineHeightScaleCss};
                 font-size: ${baseFontSizeCss};
@@ -136,14 +146,15 @@ export class Styler {
 			`;
 		}
 
-		if (this.#fontPreference) {
-			hostStyle += `
-			:host {
-				font-family: ${this.#fontPreference};
-			}
-			`;
-		}
-
 		this.#filewiseStylesCss.replaceSync(hostStyle);
+	}
+
+	#customPropertyForFont(name: string): string {
+		let property = "--og-font-";
+		const u8Arr = this.#utf8Encoder.encode(name.toLowerCase());
+		u8Arr.forEach(b => {
+			property += b.toString(16).padStart(2, "0");
+		});
+		return property;
 	}
 }

@@ -2,7 +2,10 @@ use tauri::{Emitter, menu::Menu};
 
 use crate::prefs::FontPrefer;
 
-fn handle_by_emit_event(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
+fn handle_by_emit_event<R>(app: &tauri::AppHandle<R>, id: &str) -> Result<(), String>
+where
+    R: tauri::Runtime,
+{
     app.emit_to("main", &format!("menu/{id}"), ())
         .map_err(|e| e.to_string())
 }
@@ -110,13 +113,10 @@ pub mod view {
     const TEXT: &str = "View";
 
     pub mod font_preference {
-        use tauri::{
-            Emitter,
-            menu::{Submenu, SubmenuBuilder},
-        };
+        use tauri::menu::{Submenu, SubmenuBuilder};
         use tauri_plugin_store::StoreExt;
 
-        use crate::prefs::FontPrefer;
+        use crate::{menus::handle_by_emit_event, prefs::FontPrefer};
 
         pub const ID: &str = "v_fp";
         const TEXT: &str = "Font preference";
@@ -200,9 +200,9 @@ pub mod view {
             prefs_store.set("font.prefer", json_value.clone());
 
             // notify the front-end
-            submenu
-                .app_handle()
-                .emit_to("main", &format!("menu/{}", ID), json_value)?;
+            if let Err(_) = handle_by_emit_event(submenu.app_handle(), ID) {
+                // TODO error handling needs improvement
+            }
 
             Ok(())
         }

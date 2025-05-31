@@ -1,6 +1,7 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { load, Store } from "@tauri-apps/plugin-store";
 
 import {
 	end_of_spine_message,
@@ -58,6 +59,7 @@ let elemSpinePosition: HTMLElement | null;
 //
 
 // See initReaderFrame() for initilization
+let prefsStore: Store | null = null;
 let readerShadowRoot: ShadowRoot | null = null;
 let styler: Styler | null = null;
 const refreshTocBtnLabelTask = new TaskRepeater(500);
@@ -71,6 +73,14 @@ export function loadContent(): void {
 	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
 	loadCustomizationContent();
 	loadModalsContent();
+
+	load("prefs.json", { autoSave: true })
+		.then(store => {
+			prefsStore = store;
+		})
+		.catch(err => {
+			window.alert(err);
+		});
 }
 
 function loadImageElement(
@@ -93,6 +103,11 @@ function loadImageElement(
 		});
 }
 
+/**
+ * Call this at some point during the loading of a page (Docuemnt).
+ *
+ * @param head `<head>` element of the page the reader is loading.
+ */
 async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
 	const linkedPaths = [];
 	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
@@ -110,6 +125,11 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
 		}
 	}
 	styler!.setStyleElemsCss(cssInPage);
+
+	// TODO(opt) can be parallel?
+	if (prefsStore) {
+		await styler!.loadAppPrefs(prefsStore);
+	}
 }
 
 async function renderBookPage(
@@ -381,8 +401,10 @@ export async function initReaderFrame(
 	);
 	elemTocButton!.onclick = showToc;
 
-	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", event => {
-		styler!.fontPreference = event.payload;
+	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", () => {
+		if (prefsStore) {
+			styler!.loadAppPrefs(prefsStore);
+		}
 	});
 
 	renderBookPage(spineItem, percentage);

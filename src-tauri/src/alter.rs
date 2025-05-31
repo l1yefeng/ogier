@@ -146,7 +146,7 @@ fn transform_css<'i>(
 
 fn font_custom_property_ref(name: &str) -> String {
     let mut out = String::from("var(--og-font-");
-    for b in name.as_bytes() {
+    for b in name.to_lowercase().as_bytes() {
         out.push_str(&format!("{:02x}", b));
     }
     out.push_str(")");
@@ -259,7 +259,7 @@ mod tests {
         }
         head {}"#;
         let expected = r#":host {
-            font-family: var(--og-font-4e6f746f205365726966), "Noto Serif",
+            font-family: var(--og-font-6e6f746f207365726966), "Noto Serif",
                 var(--og-font-7365726966), serif;
         }
         head {}"#;
