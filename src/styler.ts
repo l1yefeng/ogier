@@ -1,34 +1,67 @@
 import { clamp, CustomStyleKey, CustomStyles, FontPrefer } from "./base";
 import * as rs from "./invoke";
+import { load } from "@tauri-apps/plugin-store";
 
 export class Styler {
 	#readerRoot: ShadowRoot;
-	#linkedStylesheets: Record<string, CSSStyleSheet>;
-	#customStylesheet: CSSStyleSheet;
-	#inPageStylesheet: CSSStyleSheet;
+
+	#appCss: CSSStyleSheet;
+	#filewiseStylesCss: CSSStyleSheet;
+	#styleElemsCss: CSSStyleSheet;
+	#linkedCssResources: Record<string, CSSStyleSheet>;
 
 	#fontPreference: FontPrefer = null;
-	#customStyles: CustomStyles | null = null;
+	#filewiseStyles: CustomStyles | null = null;
 
 	constructor(readerRoot: ShadowRoot) {
 		this.#readerRoot = readerRoot;
-		this.#linkedStylesheets = {};
-		this.#customStylesheet = new CSSStyleSheet();
-		this.#inPageStylesheet = new CSSStyleSheet();
+		this.#appCss = new CSSStyleSheet();
+		this.#filewiseStylesCss = new CSSStyleSheet();
+		this.#styleElemsCss = new CSSStyleSheet();
+		this.#linkedCssResources = {};
 
-		this.#readerRoot.adoptedStyleSheets = [this.#inPageStylesheet, this.#customStylesheet];
+		this.#readerRoot.adoptedStyleSheets = [
+			this.#appCss,
+			this.#filewiseStylesCss,
+			this.#styleElemsCss,
+		];
+
+		this.#loadAppPrefs();
+	}
+
+	// FIXME set from lib.ts and organize
+	async #loadAppPrefs(): Promise<void> {
+		const store = await load("prefs.json");
+		const fontSubstitute = await store.get<Record<string, string>>("font.substitute");
+		console.debug("font.substitute", fontSubstitute);
+
+		let css = ":host {";
+		const encoder = new TextEncoder();
+		if (fontSubstitute) {
+			Object.entries(fontSubstitute).forEach(([key, value]) => {
+				let enc = "";
+				const u8Arr = encoder.encode(key);
+				u8Arr.forEach(b => {
+					enc += b.toString(16).padStart(2, "0");
+				});
+				css += `--og-font-${enc}: ${value};\n`;
+			});
+		}
+		css += "}";
+
+		await this.#appCss.replace(css);
 	}
 
 	load(paths: string[]): Promise<void> {
 		this.#readerRoot.adoptedStyleSheets.splice(
-			2,
-			this.#readerRoot.adoptedStyleSheets.length - 2,
+			3,
+			this.#readerRoot.adoptedStyleSheets.length - 3,
 		);
 
 		const promises = paths.map(path =>
 			new Promise((resolve: (value: CSSStyleSheet) => void, reject) => {
-				if (this.#linkedStylesheets[path]) {
-					return resolve(this.#linkedStylesheets[path]);
+				if (this.#linkedCssResources[path]) {
+					return resolve(this.#linkedCssResources[path]);
 				}
 
 				rs.getResource(path).then(css => {
@@ -37,7 +70,7 @@ export class Styler {
 					}
 					const stylesheet = new CSSStyleSheet();
 					stylesheet.replace(css);
-					this.#linkedStylesheets[path] = stylesheet;
+					this.#linkedCssResources[path] = stylesheet;
 					return resolve(stylesheet);
 				});
 			}).then(stylesheet => {
@@ -54,21 +87,21 @@ export class Styler {
 		});
 	}
 
-	setInPageStylesheet(css: string): void {
-		this.#inPageStylesheet.replace(css);
+	setStyleElemsCss(css: string): void {
+		this.#styleElemsCss.replace(css);
 	}
 
 	set fontPreference(value: FontPrefer) {
 		this.#fontPreference = value;
-		this.#setCustomStylesheet();
+		this.#setFilewiseStyleCss();
 	}
 
-	set customStyles(value: CustomStyles) {
-		this.#customStyles = value;
-		this.#setCustomStylesheet();
+	set filewiseStyles(value: CustomStyles) {
+		this.#filewiseStyles = value;
+		this.#setFilewiseStyleCss();
 	}
 
-	#setCustomStylesheet(): void {
+	#setFilewiseStyleCss(): void {
 		let hostStyle = `
             img {
                 max-width: 100%;
@@ -80,8 +113,8 @@ export class Styler {
 				background-color: #fbe54e44;
 			}
 		`;
-		if (this.#customStyles) {
-			const styles = this.#customStyles;
+		if (this.#filewiseStyles) {
+			const styles = this.#filewiseStyles;
 			const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
 			const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
 			const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 45);
@@ -111,6 +144,6 @@ export class Styler {
 			`;
 		}
 
-		this.#customStylesheet.replaceSync(hostStyle);
+		this.#filewiseStylesCss.replaceSync(hostStyle);
 	}
 }

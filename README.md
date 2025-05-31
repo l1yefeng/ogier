@@ -2,6 +2,23 @@
 
 Small and fast.
 
+## Definitions
+
+### EPUB
+
+- EPUB. The file format. Or, the EPUB-formatted file.
+- Book.
+- Content document (Page).
+- Spine.
+- Metadata.
+
+### UI
+
+### Configuration
+
+- Reader settings. Settings that control the reader.
+- File-specific styles. Settings for the reader style that apply to the current EPUB.
+
 ## TODO
 
 - SVG content - find a test case.

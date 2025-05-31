@@ -4,7 +4,6 @@ mod menus;
 mod mepub;
 mod prefs;
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufReader, Read};
@@ -31,27 +30,12 @@ type EpubHash = arrayvec::ArrayString<16>;
 
 type CmdResult<T> = Result<T, Error>;
 
+#[derive(Default)]
 struct AppData {
     book: Option<Epub>,
     book_hash: EpubHash,
     book_file_info: EpubFileInfo,
-    prefs_font_substitute: FontSubstitute,
-}
-
-impl AppData {
-    fn new() -> Self {
-        Self {
-            book: None,
-            book_hash: EpubHash::new(),
-            book_file_info: EpubFileInfo {
-                path: PathBuf::new(),
-                size: 0,
-                created: 0,
-                modified: 0,
-            },
-            prefs_font_substitute: HashMap::new(),
-        }
-    }
+    prefs_font_substitute: FontSubstitute, // TODO remove
 }
 
 type AppState = Mutex<AppData>;
@@ -61,6 +45,7 @@ const PREFS_STORE: &str = "prefs.json";
 
 pub const MIMETYPE_XHTML: &str = "application/xhtml+xml";
 pub const MIMETYPE_SVG: &str = "image/svg+xml";
+pub const MIMETYPE_CSS: &str = "text/css";
 
 // Helper functions, that tauri::commands depends on.
 // Don't lock state within. Receive state as argument.
@@ -89,8 +74,7 @@ fn book_get_current(state: &mut MutexGuard<'_, AppData>) -> CmdResult<SpineItem>
     }
 
     if mimetype.eq_ignore_ascii_case(MIMETYPE_XHTML) {
-        let font_substitute = &state.prefs_font_substitute;
-        text = alter_xhtml(&text, font_substitute).unwrap_or(text);
+        text = alter_xhtml(&text).unwrap_or(text);
     }
 
     Ok(SpineItem {
@@ -360,13 +344,8 @@ fn get_resource(state: State<AppState>, path: PathBuf) -> CmdResult<String> {
         Ok(resource_base64_encode(content, mime))
     } else if mime.starts_with("text/") {
         let content = String::from_utf8(content)?;
-        if path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("css"))
-        {
-            let state_guard = state.lock().unwrap();
-            let font_substitute = &state_guard.prefs_font_substitute;
-            Ok(alter_css(&content, font_substitute).unwrap_or(content))
+        if mime == MIMETYPE_CSS {
+            Ok(alter_css(&content).unwrap_or(content))
         } else {
             Ok(content)
         }
@@ -513,6 +492,7 @@ fn open_custom_stylesheet(app_handle: AppHandle, state: State<AppState>) -> CmdR
     Ok(())
 }
 
+// TODO: rename (see README)
 #[tauri::command]
 fn get_custom_stylesheet(app_handle: AppHandle, state: State<AppState>) -> CmdResult<String> {
     let path = {
@@ -613,7 +593,7 @@ pub fn run(filepath: Option<PathBuf>) {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(Mutex::new(AppData::new()))
+        .manage(Mutex::new(AppData::default()))
         .menu(|handle| menus::make(handle))
         .on_menu_event(|handle, event| {
             let id = event.id().0.as_str();

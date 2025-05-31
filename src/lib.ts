@@ -109,7 +109,7 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
 			cssInPage += css;
 		}
 	}
-	styler!.setInPageStylesheet(cssInPage);
+	styler!.setStyleElemsCss(cssInPage);
 }
 
 async function renderBookPage(
@@ -156,7 +156,7 @@ async function renderBookPage(
 		console.error("Error loading saved custom styles:", err);
 		customStyles = {};
 	}
-	const localStylesCommit = (styles: CustomStyles) => (styler!.customStyles = styles);
+	const localStylesCommit = (styles: CustomStyles) => (styler!.filewiseStyles = styles);
 	commitCustomStylesFromSaved(customStyles, localStylesCommit);
 	activateCustomizationInput(localStylesCommit, rs.setCustomStyles);
 

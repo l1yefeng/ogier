@@ -7,8 +7,6 @@ use quick_xml::{
     events::{BytesText, Event, attributes::Attribute},
 };
 
-use crate::prefs::FontSubstitute;
-
 fn abs_length_in_rem(value: f32, unit: &str) -> Option<f32> {
     const BASE_FONT_SIZE: f32 = 16.0;
     match unit {
@@ -69,7 +67,6 @@ fn transform_css<'i>(
     output: &mut String,
     mut expect_line_height: bool,
     mut expect_font_family: bool,
-    font_substitute: &FontSubstitute,
 ) -> Result<(), ParseError<'i, ()>> {
     while let Ok(token) = parser.next_including_whitespace() {
         match token {
@@ -118,11 +115,9 @@ fn transform_css<'i>(
             }
             // font family
             Token::Ident(value) | Token::QuotedString(value) if expect_font_family => {
-                if let Some(subs) = font_substitute.get(&value.to_string()) {
-                    output.push_str(subs);
-                } else {
-                    output.push_str(&token.to_css_string());
-                }
+                output.push_str(&font_custom_property_ref(value));
+                output.push_str(", ");
+                output.push_str(&token.to_css_string());
             }
             Token::Ident(ident) => {
                 let s = match sml_in_rem(ident) {
@@ -141,7 +136,7 @@ fn transform_css<'i>(
         };
         if let Some(close) = close {
             parser.parse_nested_block(|parser_nested| {
-                transform_css(parser_nested, output, false, false, font_substitute)
+                transform_css(parser_nested, output, false, false)
             })?;
             output.push(close);
         }
@@ -149,23 +144,29 @@ fn transform_css<'i>(
     Ok(())
 }
 
-pub fn alter_css(css: &str, font_substitute: &FontSubstitute) -> Option<String> {
+fn font_custom_property_ref(name: &str) -> String {
+    let mut out = String::from("var(--og-font-");
+    for b in name.as_bytes() {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out.push_str(")");
+    out
+}
+
+pub fn alter_css(css: &str) -> Option<String> {
     let mut output = String::new();
 
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
 
-    if let Err(_) = transform_css(&mut parser, &mut output, false, false, font_substitute) {
+    if let Err(_) = transform_css(&mut parser, &mut output, false, false) {
         return None;
     }
 
     Some(output)
 }
 
-fn transform_xhtml(
-    xhtml: &str,
-    font_substitute: &FontSubstitute,
-) -> Result<Vec<u8>, quick_xml::Error> {
+fn transform_xhtml(xhtml: &str) -> Result<Vec<u8>, quick_xml::Error> {
     let mut reader = Reader::from_str(xhtml);
     reader.config_mut().trim_text(true);
 
@@ -186,7 +187,7 @@ fn transform_xhtml(
                 replace = e
                     .unescape()
                     .map_or(None, |css| Some(css))
-                    .and_then(|css| alter_css(&css, font_substitute))
+                    .and_then(|css| alter_css(&css))
                     .map(|css| Event::Text(BytesText::from_escaped(css)));
             }
             Event::End(_) if is_css => {
@@ -198,7 +199,7 @@ fn transform_xhtml(
                     replace = attr
                         .unescape_value()
                         .map_or(None, |css| Some(css))
-                        .and_then(|css| alter_css(&css, font_substitute))
+                        .and_then(|css| alter_css(&css))
                         .map(|css| {
                             let mut start = e.to_owned();
                             start.clear_attributes();
@@ -224,8 +225,8 @@ fn transform_xhtml(
     }
 }
 
-pub fn alter_xhtml(xhtml: &str, font_substitute: &FontSubstitute) -> Option<String> {
-    let Ok(output) = transform_xhtml(xhtml, font_substitute) else {
+pub fn alter_xhtml(xhtml: &str) -> Option<String> {
+    let Ok(output) = transform_xhtml(xhtml) else {
         return None;
     };
     String::from_utf8(output).map_or(None, |s| Some(s))
@@ -233,34 +234,36 @@ pub fn alter_xhtml(xhtml: &str, font_substitute: &FontSubstitute) -> Option<Stri
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use crate::{alter::alter_xhtml, alter_css};
+    use crate::{alter_css, alter_xhtml};
 
     #[test]
     fn test_alter_css_font_size() {
         let input =
             "body { font-size: 16px; margin: 32px; } p { padding: 8px; } a { font-size: medium; }";
         let expected = "body { font-size: 1.00rem; margin: 2.00rem; } p { padding: 0.50rem; } a { font-size: 1.00rem; }";
-        assert_eq!(alter_css(input, &HashMap::new()).unwrap(), expected);
+        assert_eq!(alter_css(input).unwrap(), expected);
     }
 
     #[test]
     fn test_alter_css_nesting() {
         let input = "body { color: green; p { color: red; a { color: blue } } }";
         let expected = "body { color: green; p { color: red; a { color: blue } } }";
-        assert_eq!(alter_css(input, &HashMap::new()).unwrap(), expected);
+        assert_eq!(alter_css(input).unwrap(), expected);
     }
 
     #[test]
     fn test_alter_css_font_substitute() {
-        let input = ":host { font-family: sans-serif } head {}";
-        let expected = ":host { font-family: X } head {}";
-        let map = HashMap::from_iter(vec![
-            (String::from("sans-serif"), String::from("X")),
-            (String::from("head"), String::from("Y")),
-        ]);
-        assert_eq!(alter_css(input, &map).unwrap(), expected);
+        let input = r#":host {
+            font-family: "Noto Serif",
+                serif;
+        }
+        head {}"#;
+        let expected = r#":host {
+            font-family: var(--og-font-4e6f746f205365726966), "Noto Serif",
+                var(--og-font-7365726966), serif;
+        }
+        head {}"#;
+        assert_eq!(alter_css(input).unwrap(), expected);
     }
 
     #[test]
@@ -277,13 +280,13 @@ mod tests {
                     color: blue;
                     line-height: calc(var(--og-line-height-scale) * 1.00);
                 }</style></head></html>"#;
-        assert_eq!(alter_xhtml(input, &HashMap::new()).unwrap(), expected);
+        assert_eq!(alter_xhtml(input).unwrap(), expected);
     }
 
     #[test]
     fn test_alter_xhtml_style_inline() {
         let input = "<html><body style=\"line-height:1\"></body></html>";
         let expected = "<html><body style=\"line-height:calc(var(--og-line-height-scale) * 1.00)\"></body></html>";
-        assert_eq!(alter_xhtml(input, &HashMap::new()).unwrap(), expected);
+        assert_eq!(alter_xhtml(input).unwrap(), expected);
     }
 }

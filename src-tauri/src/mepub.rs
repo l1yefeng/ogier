@@ -85,7 +85,7 @@ pub struct SpineItem {
     pub mimetype: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Clone, Default, Serialize)]
 pub struct EpubFileInfo {
     pub path: std::path::PathBuf,
     pub size: u64,
