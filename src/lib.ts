@@ -32,18 +32,7 @@ import {
 	loadCustomizationContent,
 } from "./custom";
 import * as rs from "./invoke";
-import {
-	createBookDetailsUi,
-	createTocUi,
-	loadModalsContent,
-	mostRecentNavPoint,
-	setModalsLanguage,
-	setupNotePreviewGoThere,
-	setupTocGoTo,
-	showDetails,
-	showNotePreview,
-	showToc,
-} from "./modals";
+import { DetailsModal, NavModal, PreviewModal } from "./modal";
 import { Styler } from "./styler";
 
 // Elements. Initialized in DOMContentLoaded listener.
@@ -72,7 +61,6 @@ export function loadContent(): void {
 	elemTocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
 	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
 	loadCustomizationContent();
-	loadModalsContent();
 
 	load("prefs.json", { autoSave: true })
 		.then(store => {
@@ -196,7 +184,7 @@ async function renderBookPage(
 	refreshTocBtnLabelTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();
 		const bodyRect = pageBody.getBoundingClientRect();
-		const btn = mostRecentNavPoint(
+		const btn = NavModal.get().mostRecentNavPoint(
 			spineItem.path,
 			getCurrentPositionPx(hostRect, bodyRect),
 			id => {
@@ -279,8 +267,9 @@ function previewSamePageLocation(anchor: HTMLElement, elemNoteId: string): void 
 	const result = createSamePageLocationPreviewContent(anchor, elemNote);
 	if (result) {
 		const [clone, original] = result;
-		showNotePreview(clone);
-		setupNotePreviewGoThere(() => {
+		const modal = PreviewModal.get();
+		modal.show(clone);
+		modal.setupGoThere(() => {
 			elemNote.scrollIntoView();
 			original.classList.add("og-attention");
 			window.setTimeout(() => {
@@ -357,11 +346,12 @@ async function initDetails(): Promise<void> {
 	}
 
 	Context.epubLang = details.metadata.find(item => item.property == "language")?.value ?? "";
-	setModalsLanguage();
+	NavModal.get().onContextLangChange();
 	Context.spineLength = details.spineLength;
-	createBookDetailsUi(details);
+	const modal = DetailsModal.get();
+	modal.init(details);
 
-	getCurrentWebviewWindow().listen("menu/f_d", showDetails);
+	getCurrentWebviewWindow().listen("menu/f_d", () => modal.show());
 }
 
 async function initToc(): Promise<void> {
@@ -374,10 +364,11 @@ async function initToc(): Promise<void> {
 		elemTocButton!.title = toc_unavailable_message;
 		return;
 	}
-	createTocUi(result);
-	setupTocGoTo(navigateTo);
+	const modal = NavModal.get();
+	modal.init(result);
+	modal.setupTocGoTo(navigateTo);
 
-	getCurrentWebviewWindow().listen("menu/f_toc", showToc);
+	getCurrentWebviewWindow().listen("menu/f_toc", () => modal.show());
 }
 
 export async function initReaderFrame(
@@ -399,7 +390,7 @@ export async function initReaderFrame(
 	readerShadowRoot.addEventListener("click", event =>
 		handleClickInReader(event as PointerEvent),
 	);
-	elemTocButton!.onclick = showToc;
+	elemTocButton!.onclick = () => NavModal.get().show();
 
 	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", () => {
 		if (prefsStore) {
@@ -441,10 +432,10 @@ function handleKeyEvent(event: KeyboardEvent): void {
 		moveInSpine(false);
 	} else if (event.key == "t") {
 		event.preventDefault();
-		showToc();
+		NavModal.get().show();
 	} else if (event.key == "d" || event.key == "i") {
 		// TODO focus different tabs
 		event.preventDefault();
-		showDetails();
+		DetailsModal.get().show();
 	}
 }
