@@ -12,7 +12,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
-use epub::doc::{DocError, EpubDoc, EpubVersion, NavPoint, ResourceItem};
+use epub::doc::{DocError, EpubDoc, NavPoint, ResourceItem};
 use tauri::{AppHandle, Manager, State, Window};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
@@ -98,11 +98,25 @@ fn book_navigate(state: &mut MutexGuard<'_, AppData>, command: Navigation) -> Cm
 
 /// Acts on state.book. Find toc nav in the book.
 /// If a document contains one, returns its path and its content.
-fn book_find_nav_doc(state: &mut MutexGuard<'_, AppData>) -> Option<(PathBuf, String)> {
+fn book_get_nav_doc(state: &mut MutexGuard<'_, AppData>) -> Option<(String, String)> {
     let book = state.book.as_mut().unwrap();
     let id = book.get_nav_id()?;
     let ResourceItem { path, .. } = book.resources.get(&id)?;
-    let path = path.clone();
+
+    // TODO fix it in epub-rs
+    let path = {
+        let mut components = Vec::new();
+        path.components().for_each(|component| {
+            let c = component.as_os_str();
+            if c == ".." {
+                _ = components.pop();
+            } else {
+                components.push(c.to_string_lossy());
+            }
+        });
+        components.join("/")
+    };
+
     let content = book.get_resource_str_by_path(&path)?;
     Some((path, content))
 }
@@ -357,41 +371,23 @@ fn get_resource(state: State<AppState>, path: PathBuf) -> CmdResult<String> {
 
 #[tauri::command]
 fn get_toc(state: State<AppState>) -> CmdResult<EpubToc> {
-    let (version, toc, toc_title) = {
-        let state_guard = state.lock().unwrap();
-        let book = state_guard.book.as_ref().unwrap();
-        // NOTE: this is the legacy NCX toc
-        (
-            book.version.clone(),
-            book.toc.clone(),
-            book.toc_title.clone(),
-        )
-    };
+    if let Some((path, xhtml)) = book_get_nav_doc(&mut state.lock().unwrap()) {
+        return Ok(EpubToc::Nav { path, xhtml });
+    }
 
-    if !toc.is_empty() {
+    // try the legacy NCX toc
+    let state_guard = state.lock().unwrap();
+    let book = state_guard.book.as_ref().unwrap();
+
+    if !book.toc.is_empty() {
         return Ok(EpubToc::Ncx {
             root: MyNavPoint(NavPoint {
-                label: toc_title,
+                label: book.toc_title.clone(),
                 content: PathBuf::new(),
-                children: toc,
+                children: book.toc.clone(),
                 play_order: 0,
             }),
         });
-    }
-
-    if let EpubVersion::Version3_0 = version {
-        let mut state_guard = state.lock().unwrap();
-        if let Some((path, nav_doc_content)) = book_find_nav_doc(&mut state_guard) {
-            let path = if cfg!(windows) {
-                path.to_string_lossy().replace('\\', "/")
-            } else {
-                path.to_string_lossy().to_string()
-            };
-            return Ok(EpubToc::Nav {
-                path,
-                xhtml: nav_doc_content,
-            });
-        }
     }
 
     Err(error::Error::EpubHasNoToc)
