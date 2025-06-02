@@ -1,7 +1,6 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { load, Store } from "@tauri-apps/plugin-store";
 
 import {
 	end_of_spine_message,
@@ -48,7 +47,6 @@ let elemSpinePosition: HTMLElement | null;
 //
 
 // See initReaderFrame() for initilization
-let prefsStore: Store | null = null;
 let readerShadowRoot: ShadowRoot | null = null;
 let styler: Styler | null = null;
 const refreshTocBtnLabelTask = new TaskRepeater(500);
@@ -61,14 +59,6 @@ export function loadContent(): void {
 	elemTocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
 	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
 	loadCustomizationContent();
-
-	load("prefs.json", { autoSave: true })
-		.then(store => {
-			prefsStore = store;
-		})
-		.catch(err => {
-			window.alert(err);
-		});
 }
 
 function loadImageElement(
@@ -115,9 +105,7 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
 	styler!.setStyleElemsCss(cssInPage);
 
 	// TODO(opt) can be parallel?
-	if (prefsStore) {
-		await styler!.loadAppPrefs(prefsStore);
-	}
+	await styler!.loadAppPrefs();
 }
 
 async function renderBookPage(
@@ -393,9 +381,7 @@ export async function initReaderFrame(
 	elemTocButton!.onclick = () => NavModal.get().show();
 
 	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", () => {
-		if (prefsStore) {
-			styler!.loadAppPrefs(prefsStore);
-		}
+		styler!.loadAppPrefs();
 	});
 
 	renderBookPage(spineItem, percentage);

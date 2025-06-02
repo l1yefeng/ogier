@@ -5,7 +5,6 @@ import { EpubDetails, EpubMetadataItem } from "../base";
 
 export class DetailsModal extends BaseModal {
 	#bookDl: HTMLDListElement;
-	#metadataPre: HTMLPreElement;
 	#fileDl: HTMLDListElement;
 	#coverImg: HTMLImageElement;
 
@@ -13,7 +12,6 @@ export class DetailsModal extends BaseModal {
 		super(document.getElementById("og-details-modal") as HTMLDialogElement);
 		this.locked = true;
 		this.#bookDl = document.getElementById("og-details-book") as HTMLDListElement;
-		this.#metadataPre = document.getElementById("og-details-metadata") as HTMLPreElement;
 		this.#fileDl = document.getElementById("og-details-file") as HTMLDListElement;
 		this.#coverImg = document.getElementById("og-details-cover") as HTMLImageElement;
 
@@ -32,8 +30,6 @@ export class DetailsModal extends BaseModal {
 		}
 
 		this.#bookDl.replaceChildren(...details.metadata.flatMap(createDetailsDlItemRich));
-
-		this.#metadataPre.textContent = "TO DO";
 
 		this.#fileDl.replaceChildren();
 		this.#fileDl.append(...createDetailsDlItem("Path", details.fileInfo.path));

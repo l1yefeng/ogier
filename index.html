@@ -2,9 +2,9 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <link rel="stylesheet" href="/src/styles.css" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="/src/styles.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OgierEPUB</title>
   <script type="module" src="/src/main.ts" defer></script>
 </head>
@@ -80,13 +80,50 @@
               <dl id="og-details-book"></dl>
             </details>
             <details name="og-details">
-              <summary>EPUB metadata</summary>
-              <pre id="og-details-metadata"></pre>
-            </details>
-            <details name="og-details">
               <summary>File info</summary>
               <dl id="og-details-file"></dl>
             </details>
+          </div>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="og-fonts-modal">
+      <form method="dialog">
+        <header>
+          <span>Fonts preferences</span>
+          <button value="">✖</button>
+        </header>
+        <div>
+          <fieldset>
+            <legend>Preferred style</legend>
+            <label>
+              <input type="radio" name="og-font-prefers" value="sans-serif">
+              Sans-serif
+            </label>
+            <label>
+              <input type="radio" name="og-font-prefers" value="serif">
+              Serif
+            </label>
+            <label>
+              <input type="radio" name="og-font-prefers" value="">
+              EPUB's choice
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Substitutions</legend>
+            <p style="margin-block:0; font-size:smaller">Font choices in EPUBs can be <em>substituted</em>.</p>
+            <div id="og-fonts-subst-editor"></div>
+            <div>
+              <button>ADD</button>
+            </div>
+            <!-- <p id="og-fonts-subst-preview">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean vitae lacus a augue dictum consectetur.
+              Fusce volutpat, ligula quis posuere imperdiet, leo velit ornare est, nec congue nisi metus nec.
+            </p> -->
+          </fieldset>
+          <div>
+            <!-- <button id="og-fonts-subst-reset">RESET</button> -->
+            <button id="og-fonts-subst-confirm">CONFIRM</button>
           </div>
         </div>
       </form>

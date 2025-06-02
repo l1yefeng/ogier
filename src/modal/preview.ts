@@ -13,10 +13,10 @@ export class PreviewModal extends BaseModal {
 	}
 
 	show(floatingContentRoot: HTMLElement): void {
-		ModalCoordinator.show(this);
-
-		this.#contentDiv.replaceChildren(...floatingContentRoot.childNodes);
-		this.#contentDiv.lang = Context.spineItemLang || Context.epubLang;
+		if (ModalCoordinator.show(this)) {
+			this.#contentDiv.replaceChildren(...floatingContentRoot.childNodes);
+			this.#contentDiv.lang = Context.spineItemLang || Context.epubLang;
+		}
 	}
 
 	setupGoThere(navigate: () => any): void {

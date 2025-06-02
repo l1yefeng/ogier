@@ -57,18 +57,19 @@ export class BaseModal {
 export class ModalCoordinator {
 	static modals: Record<string, BaseModal> = {};
 
-	static show(modal: BaseModal): void {
-		if (modal.inner.open) return;
-		if (modal.locked) return;
+	static show(modal: BaseModal): boolean {
+		if (modal.inner.open) return false;
+		if (modal.locked) return false;
 		for (const id in ModalCoordinator.modals) {
 			const m = ModalCoordinator.modals[id];
 			if (modal != m) {
 				if (!m.close()) {
-					return;
+					return false;
 				}
 			}
 		}
 
 		modal.inner.showModal();
+		return true;
 	}
 }

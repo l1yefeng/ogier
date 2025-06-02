@@ -1,6 +1,5 @@
-import { Store } from "@tauri-apps/plugin-store";
-
 import { clamp, CustomStyleKey, CustomStyles, FontPrefer } from "./base";
+import { Context } from "./context";
 import * as rs from "./invoke";
 
 export class Styler {
@@ -28,10 +27,13 @@ export class Styler {
 		];
 	}
 
-	async loadAppPrefs(store: Store): Promise<void> {
-		// TODO handle malformed prefs json
-		const fontSubstitute = await store.get<Record<string, string>>("font.substitute");
-		const fontPrefer = await store.get<FontPrefer>("font.prefer");
+	async loadAppPrefs(): Promise<void> {
+		// TODO handle better
+		const prefs = Context.prefsStore;
+		if (!prefs) return;
+
+		const fontSubstitute = await prefs.get<Record<string, string>>("font.substitute");
+		const fontPrefer = await prefs.get<FontPrefer>("font.prefer");
 
 		let css = ":host {";
 

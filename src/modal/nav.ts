@@ -49,8 +49,9 @@ export class NavModal extends BaseModal {
 	}
 
 	show(): void {
-		ModalCoordinator.show(this);
-		this.#lastMostRecentNavPoint?.scrollIntoView();
+		if (ModalCoordinator.show(this)) {
+			this.#lastMostRecentNavPoint?.scrollIntoView();
+		}
 	}
 
 	setupTocGoTo(navigate: (path: string, locationId?: string) => any) {
