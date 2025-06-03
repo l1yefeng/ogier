@@ -31,7 +31,7 @@ import {
 	loadCustomizationContent,
 } from "./custom";
 import * as rs from "./invoke";
-import { DetailsModal, NavModal, PreviewModal } from "./modal";
+import { DetailsModal, FontsModal, NavModal, PreviewModal } from "./modal";
 import { Styler } from "./styler";
 
 // Elements. Initialized in DOMContentLoaded listener.
@@ -356,16 +356,20 @@ async function initToc(): Promise<void> {
 	modal.init(result);
 	modal.setupTocGoTo(navigateTo);
 
-	getCurrentWebviewWindow().listen("menu/f_toc", () => modal.show());
+	getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
 }
 
 export async function initReaderFrame(
 	spineItem: SpineItemData,
 	percentage: number | null,
 ): Promise<void> {
-	// TODO: don't duplicate
+	// TODO: merge to one rs call
 	initToc();
 	initDetails();
+
+	getCurrentWebviewWindow().listen("menu/v_mfs", () => {
+		FontsModal.get().show();
+	});
 
 	// show reader
 	elemFrame!.style.display = ""; // use display value in css

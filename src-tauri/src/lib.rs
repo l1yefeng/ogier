@@ -23,7 +23,6 @@ use error::Error;
 use mepub::{
     EpubDetails, EpubFileInfo, EpubToc, MyMetadataItem, MyNavPoint, Navigation, SpineItem,
 };
-use prefs::{FontPrefer, FontSubstitute};
 
 type Epub = EpubDoc<BufReader<File>>;
 type EpubHash = arrayvec::ArrayString<16>;
@@ -35,7 +34,7 @@ struct AppData {
     book: Option<Epub>,
     book_hash: EpubHash,
     book_file_info: EpubFileInfo,
-    prefs_font_substitute: FontSubstitute, // TODO remove
+    setup_err: Option<Error>,
 }
 
 type AppState = Mutex<AppData>;
@@ -175,36 +174,12 @@ where
     Some((in_spine, in_page))
 }
 
-/// Cache part of prefs from store in state.
-/// Do call this after relevant prefs are changed in store.
-fn cache_prefs_in_state<R>(
-    state: &mut MutexGuard<'_, AppData>,
-    prefs_store: &Store<R>,
-) -> CmdResult<()>
-where
-    R: tauri::Runtime,
-{
-    // font.substitute
-    state.prefs_font_substitute.clear();
-    if let Some(value) = prefs_store.get("font.substitute") {
-        let serde_json::Value::Object(value) = value else {
-            return Err(error::Error::InvalidPrefs);
-        };
-        for (font, subs) in value.iter() {
-            let serde_json::Value::String(subs) = subs else {
-                return Err(error::Error::InvalidPrefs);
-            };
-            state
-                .prefs_font_substitute
-                .insert(font.clone(), subs.clone());
-        }
+/// Do several things that are necessary when a book just opened.
+fn post_book_open(window: &Window, state: &mut MutexGuard<'_, AppData>) -> CmdResult<bool> {
+    if let Some(err) = state.setup_err.take() {
+        return Err(err);
     }
 
-    Ok(())
-}
-
-/// Do several things that are necessary when a book just opened.
-fn post_book_open(window: &Window, state: &MutexGuard<'_, AppData>) -> CmdResult<bool> {
     let book = &state.book;
     let Some(book) = book else {
         return Ok(false);
@@ -219,23 +194,6 @@ fn post_book_open(window: &Window, state: &MutexGuard<'_, AppData>) -> CmdResult
 
     // update menu to complete
     menus::update(&window)?;
-
-    let font_prefer_value = {
-        let prefs = window.store(PREFS_STORE)?;
-        prefs.get("font.prefer")
-    };
-    // not always necessary, because this part of menu depends on prefs, not books.
-    // but considering
-    menus::set_font_preference(
-        &window,
-        match font_prefer_value {
-            Some(serde_json::Value::String(value)) if value == "sans-serif" => {
-                Some(FontPrefer::SansSerif)
-            }
-            Some(serde_json::Value::String(value)) if value == "serif" => Some(FontPrefer::Serif),
-            _ => None,
-        },
-    )?;
 
     Ok(true)
 }
@@ -527,7 +485,7 @@ fn open_epub_impl(
     let progress_store = window.store(PROGRESS_STORE)?;
     let mut state_guard = state.lock().unwrap();
     book_open(&mut state_guard, &path)?;
-    post_book_open(&window, &state_guard)?;
+    post_book_open(&window, &mut state_guard)?;
     book_get_init_page(&mut state_guard, &progress_store)
 }
 
@@ -545,20 +503,12 @@ fn open_epub(
 }
 
 #[tauri::command]
-fn reload_book(
-    app_handle: AppHandle,
-    window: Window,
-    state: State<AppState>,
-) -> CmdResult<(SpineItem, Option<f64>)> {
+fn reload_book(window: Window, state: State<AppState>) -> CmdResult<(SpineItem, Option<f64>)> {
     log::debug!("command reload_book");
     let path = {
         let state_guard = state.lock().unwrap();
         state_guard.book_file_info.path.clone()
     };
-
-    let prefs_store = app_handle.store(PREFS_STORE)?;
-    prefs_store.reload()?;
-    cache_prefs_in_state(state.lock().as_mut().unwrap(), &prefs_store)?;
 
     open_epub_impl(window, state, path)
 }
@@ -569,14 +519,14 @@ fn open_epub_if_loaded(
     state: State<AppState>,
 ) -> CmdResult<Option<(SpineItem, Option<f64>)>> {
     log::debug!("command open_epub_if_loaded");
-    let opened = post_book_open(&window, &state.lock().unwrap())?;
+    let mut state_guard = state.lock().unwrap();
+    let opened = post_book_open(&window, &mut state_guard)?;
     if !opened {
         log::debug!("no book was loaded");
         return Ok(None);
     }
 
-    let mut state_guard = state.lock().unwrap();
-    post_book_open(&window, &state_guard)?;
+    post_book_open(&window, &mut state_guard)?;
     let progress_store = window.store(PROGRESS_STORE)?;
     book_get_init_page(&mut state_guard, &progress_store).map(Some)
 }
@@ -590,27 +540,18 @@ pub fn run(filepath: Option<PathBuf>) {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppData::default()))
-        .menu(|handle| menus::make(handle))
-        .on_menu_event(|handle, event| {
-            let id = event.id().0.as_str();
-            if let Err(err) = menus::handle_menu_event(handle, id) {
-                log::error!("when handling menu event {}: {}", id, err);
-            }
-        })
+        .menu(|app_handle| menus::make(app_handle))
+        .on_menu_event(|handle, event| menus::handle_menu_event(handle, event.id().0.as_str()))
         .setup(move |app| {
             log::debug!("setup");
             if let Some(filepath) = filepath {
                 log::debug!(" with {}", filepath.to_string_lossy());
                 let state = app.state::<AppState>();
-                if let Err(err) = book_open(state.lock().as_mut().unwrap(), &filepath) {
-                    log::error!("failed to open: {}", err);
+                let mut state_guard = state.lock().unwrap();
+                if let Err(err) = book_open(&mut state_guard, &filepath) {
+                    state_guard.setup_err = Some(err);
                 }
             }
-
-            let state = app.state::<AppState>();
-            let prefs_store = app.store(PREFS_STORE)?;
-            cache_prefs_in_state(state.lock().as_mut().unwrap(), &prefs_store)?;
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

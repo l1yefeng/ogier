@@ -1,13 +1,20 @@
+// TODO:
+// - Error handling
+// - Put ID and Text in resource file that can be imported here and frontend.
+// - Tidy the `use` or qualifiers
+
 use tauri::{Emitter, menu::Menu};
+use tauri_plugin_store::StoreExt;
 
 use crate::prefs::FontPrefer;
 
-fn handle_by_emit_event<R>(app: &tauri::AppHandle<R>, id: &str) -> Result<(), String>
+fn handle_by_frontend<R>(app: &tauri::AppHandle<R>, id: &str)
 where
     R: tauri::Runtime,
 {
-    app.emit_to("main", &format!("menu/{id}"), ())
-        .map_err(|e| e.to_string())
+    if let Err(e) = app.emit_to("main", &format!("menu/{id}"), ()) {
+        log::error!("Could not emit event to frontend: {}", e);
+    }
 }
 
 pub mod file {
@@ -32,15 +39,13 @@ pub mod file {
         pub const ID: &str = "f_sif";
         pub const TEXT: &str = "Show in folder";
 
-        pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
-            let filepath = {
-                let state = app.state::<crate::AppState>();
-                let state = state.lock().unwrap();
-                state.book_file_info.path.clone()
-            };
-            app.opener()
-                .reveal_item_in_dir(filepath)
-                .map_err(|e| e.to_string())
+        pub fn handle(app: &tauri::AppHandle) {
+            let state = app.state::<crate::AppState>();
+            let state_guard = state.lock().unwrap();
+            // TODO emit error to front end, and it can be used in lib.rs too
+            let _ = app
+                .opener()
+                .reveal_item_in_dir(&state_guard.book_file_info.path);
         }
     }
 
@@ -48,9 +53,9 @@ pub mod file {
         pub const ID: &str = "f_d";
         pub const TEXT: &str = "Details";
     }
-    pub mod table_of_contents {
-        pub const ID: &str = "f_toc";
-        pub const TEXT: &str = "Table of contents";
+    pub mod navigation {
+        pub const ID: &str = "f_n";
+        pub const TEXT: &str = "Navigation";
     }
 
     pub mod open_preference_file {
@@ -60,11 +65,10 @@ pub mod file {
         pub const ID: &str = "f_opf";
         pub const TEXT: &str = "Open preference file";
 
-        pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
-            let path = resolve_store_path(app, crate::PREFS_STORE).map_err(|e| e.to_string())?;
-            app.opener()
-                .open_path(path.to_string_lossy(), None::<&str>)
-                .map_err(|e| e.to_string())
+        pub fn handle(app: &tauri::AppHandle) {
+            if let Ok(path) = resolve_store_path(app, crate::PREFS_STORE) {
+                let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
+            }
         }
     }
 
@@ -96,8 +100,8 @@ pub mod file {
                 &MenuItemBuilder::new(details::TEXT)
                     .id(details::ID)
                     .build(window)?,
-                &MenuItemBuilder::new(table_of_contents::TEXT)
-                    .id(table_of_contents::ID)
+                &MenuItemBuilder::new(navigation::TEXT)
+                    .id(navigation::ID)
                     .build(window)?,
                 &PredefinedMenuItem::separator(window)?,
             ],
@@ -116,12 +120,12 @@ pub mod view {
         use tauri::menu::{Submenu, SubmenuBuilder};
         use tauri_plugin_store::StoreExt;
 
-        use crate::{menus::handle_by_emit_event, prefs::FontPrefer};
+        use crate::{menus::handle_by_frontend, prefs::FontPrefer};
 
         pub const ID: &str = "v_fp";
         const TEXT: &str = "Font preference";
 
-        pub fn handle(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
+        pub fn handle(app: &tauri::AppHandle, id: &str) {
             // ensure at most one is checked
             let menu = app
                 .menu()
@@ -134,7 +138,10 @@ pub mod view {
             let menu = menu.as_submenu_unchecked();
             let menu_item = menu.get(id).unwrap();
             let menu_item = menu_item.as_check_menuitem_unchecked();
-            let font_pref = if menu_item.is_checked().map_err(|e| e.to_string())? {
+            let Ok(is_checked) = menu_item.is_checked() else {
+                return;
+            };
+            let font_pref = if is_checked {
                 Some(if id == serif::ID {
                     FontPrefer::Serif
                 } else {
@@ -143,7 +150,7 @@ pub mod view {
             } else {
                 None
             };
-            set(&menu, font_pref).map_err(|e| e.to_string())
+            let _ = set(&menu, font_pref);
         }
 
         pub mod sans_serif {
@@ -200,30 +207,33 @@ pub mod view {
             prefs_store.set("font.prefer", json_value.clone());
 
             // notify the front-end
-            if let Err(_) = handle_by_emit_event(submenu.app_handle(), ID) {
-                // TODO error handling needs improvement
-            }
+            handle_by_frontend(submenu.app_handle(), ID);
 
             Ok(())
         }
     }
 
-    pub mod open_custom_styles {
+    pub mod open_filewise_styles {
         use tauri::Manager;
         use tauri_plugin_opener::OpenerExt;
 
-        pub const ID: &str = "v_ocs";
-        pub(super) const TEXT: &str = "Open custom styles";
+        pub const ID: &str = "v_ofs";
+        pub(super) const TEXT: &str = "Open filewise styles";
 
-        pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
+        pub fn handle(app: &tauri::AppHandle) {
             let state = app.state::<crate::AppState>();
             let Ok(css_path) = crate::custom_styles_path(app, &state.lock().unwrap()) else {
-                return Err(String::from("failed to obtain custom styles file"));
+                return;
             };
-            app.opener()
-                .open_path(css_path.to_string_lossy(), None::<&str>)
-                .map_err(|e| e.to_string())
+            let _ = app
+                .opener()
+                .open_path(css_path.to_string_lossy(), None::<&str>);
         }
+    }
+
+    pub mod more_font_settings {
+        pub const ID: &str = "v_mfs";
+        pub(super) const TEXT: &str = "More font settings";
     }
 
     pub fn make<R>(window: &tauri::Window<R>) -> tauri::Result<Submenu<R>>
@@ -232,8 +242,10 @@ pub mod view {
     {
         SubmenuBuilder::new(window, TEXT)
             .id(ID)
+            .text(open_filewise_styles::ID, open_filewise_styles::TEXT)
+            .separator()
             .item(&font_preference::make(window)?)
-            .text(open_custom_styles::ID, open_custom_styles::TEXT)
+            .text(more_font_settings::ID, more_font_settings::TEXT)
             .build()
     }
 }
@@ -255,10 +267,10 @@ pub mod help {
         pub const ID: &str = "h_ws";
         pub(super) const TEXT: &str = "Website && Support";
 
-        pub fn handle(app: &tauri::AppHandle) -> Result<(), String> {
-            app.opener()
-                .open_url("https://ogier.lyfeng.xyz", None::<&str>)
-                .map_err(|e| e.to_string())
+        pub fn handle(app: &tauri::AppHandle) {
+            let _ = app
+                .opener()
+                .open_url("https://ogier.lyfeng.xyz", None::<&str>);
         }
     }
 
@@ -293,24 +305,30 @@ pub mod help {
     }
 }
 
-pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
+pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) {
     match id {
-        file::open_in_new_window::ID => Ok(()),
-        file::show_in_folder::ID => file::show_in_folder::handle(app),
-        file::open::ID | file::details::ID | file::table_of_contents::ID => {
-            handle_by_emit_event(app, id)
+        file::open_in_new_window::ID => {
+            log::debug!("Opening in new window is unimplemented");
         }
+        file::show_in_folder::ID => file::show_in_folder::handle(app),
+        file::open::ID | file::details::ID | file::navigation::ID => {
+            handle_by_frontend(app, id);
+        }
+
         file::open_preference_file::ID => file::open_preference_file::handle(app),
 
         view::font_preference::sans_serif::ID | view::font_preference::serif::ID => {
             view::font_preference::handle(app, id)
         }
-        view::open_custom_styles::ID => view::open_custom_styles::handle(app),
+        view::open_filewise_styles::ID => view::open_filewise_styles::handle(app),
+        view::more_font_settings::ID => handle_by_frontend(app, id),
 
-        help::version::ID => Ok(()),
+        help::version::ID => (),
         help::website_support::ID => help::website_support::handle(app),
 
-        _ => Err(String::from("Unexpected event")),
+        _ => {
+            log::warn!("Unexpected event {}", id);
+        }
     }
 }
 
@@ -326,7 +344,7 @@ where
 }
 
 /// Returns true if updated. The function does nothing if the menu has been updated.
-pub fn update<R>(window: &tauri::Window<R>) -> tauri::Result<bool>
+pub fn update<R>(window: &tauri::Window<R>) -> crate::CmdResult<bool>
 where
     R: tauri::Runtime,
 {
@@ -343,10 +361,26 @@ where
     let view_submenu = view::make(window)?;
     menu.insert(&view_submenu, 1)?;
 
+    // font prefer init value
+    let font_prefer_value = {
+        let prefs = window.store(crate::PREFS_STORE)?;
+        prefs.get("font.prefer")
+    };
+    set_font_preference(
+        &window,
+        match font_prefer_value {
+            Some(serde_json::Value::String(value)) if value == "sans-serif" => {
+                Some(FontPrefer::SansSerif)
+            }
+            Some(serde_json::Value::String(value)) if value == "serif" => Some(FontPrefer::Serif),
+            _ => None,
+        },
+    )?;
+
     Ok(true)
 }
 
-pub fn set_font_preference<R>(
+fn set_font_preference<R>(
     window: &tauri::Window<R>,
     value: Option<FontPrefer>,
 ) -> Result<(), crate::error::Error>

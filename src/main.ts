@@ -2,19 +2,20 @@
  * The entry file, imported in HTML directly.
  */
 
-import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { PhysicalPosition } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
 
 import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./strings.json";
 
-import { takeSessionInProgress } from "./base";
+import { SpineItemData, takeSessionInProgress } from "./base";
 import { Context } from "./context";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
 
-async function chooseFileAndOpen(): Promise<void> {
-	const path = await open({
+function chooseAndMaybeOpenFile(): Promise<void> {
+	return open({
 		directory: false,
 		filters: [
 			{
@@ -22,53 +23,18 @@ async function chooseFileAndOpen(): Promise<void> {
 				extensions: ["epub"],
 			},
 		],
+	}).then(filepath => {
+		if (filepath) return openChosenFileAt(filepath);
 	});
-	if (path) {
-		const [spineItem, percentage] = await rs.openEpub(path);
-		await initReaderFrame(spineItem, percentage);
-	}
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-	loadContent();
+function showWelcomeScreen(): void {
+	const clickToOpen = showClickToOpen(true);
+	clickToOpen.onclick = chooseAndMaybeOpenFile;
+}
 
-	const elemClickToOpen = document.getElementById("og-click-to-open") as HTMLElement;
-
-	const enableClickToOpen = () => {
-		elemClickToOpen.style.visibility = "";
-		elemClickToOpen.onclick = () => {
-			chooseFileAndOpen().catch(err => {
-				window.alert(err);
-			});
-		};
-	};
-
-	if (takeSessionInProgress()) {
-		rs.reloadBook()
-			.then(([spineItem, percentage]) => {
-				return initReaderFrame(spineItem, percentage);
-			})
-			.catch(err => {
-				window.alert(err);
-				enableClickToOpen();
-			});
-	} else {
-		rs.openEpubIfLoaded()
-			.then(result => {
-				if (result != null) {
-					const [spineItem, percentage] = result;
-					return initReaderFrame(spineItem, percentage);
-				} else {
-					enableClickToOpen();
-				}
-			})
-			.catch(err => {
-				window.alert(err);
-				enableClickToOpen();
-			});
-	}
-
-	getCurrentWindow().listen<{
+function enableDragAndDrop(): void {
+	getCurrentWebviewWindow().listen<{
 		paths: string[];
 		position: PhysicalPosition;
 	}>("tauri://drag-drop", event => {
@@ -82,30 +48,60 @@ document.addEventListener("DOMContentLoaded", () => {
 			if (parts[parts.length - 1].toLowerCase() != "epub") {
 				window.alert(file_picker_not_epub_alert);
 			} else {
-				// Proceed
-				rs.openEpub(path)
-					.then(([spineItem, percentage]) => {
-						return initReaderFrame(spineItem, percentage);
-					})
-					.catch(err => {
-						window.alert(err);
-					});
+				openChosenFileAt(path); // don't wait
 			}
 		}
 	});
+}
 
-	getCurrentWindow().listen("menu/f_o", () => {
-		chooseFileAndOpen().catch(err => {
-			window.alert(err);
-		});
+function openChosenFileAt(path: string): Promise<void> {
+	return rs
+		.openEpub(path)
+		.then(([spineItem, percentage]) => {
+			showClickToOpen(false);
+			initReaderFrame(spineItem, percentage); // don't wait
+		})
+		.catch(window.alert);
+}
+
+function showClickToOpen(yes: boolean): HTMLElement {
+	const elem = document.getElementById("og-click-to-open") as HTMLElement;
+	// inline style is hidden in HTML
+	elem.style.visibility = yes ? "" : "hidden";
+	return elem;
+}
+
+function start(read: null | [SpineItemData, number | null]): void {
+	if (read) {
+		const [spineItem, percentage] = read;
+		initReaderFrame(spineItem, percentage); // don't wait
+	} else {
+		showWelcomeScreen();
+	}
+	enableDragAndDrop();
+	getCurrentWebviewWindow().listen("menu/f_o", chooseAndMaybeOpenFile);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+	loadContent();
+
+	load("prefs.json", { autoSave: true }).then(store => {
+		Context.prefsStore = store;
 	});
 
-	// App initializtion, not dependent on EPUB
-	load("prefs.json", { autoSave: true })
-		.then(store => {
-			Context.prefsStore = store;
-		})
-		.catch(err => {
-			window.alert(err);
-		});
+	if (takeSessionInProgress()) {
+		rs.reloadBook()
+			.then(start)
+			.catch(err => {
+				console.error(err);
+				start(null);
+			});
+	} else {
+		rs.openEpubIfLoaded()
+			.then(start)
+			.catch(err => {
+				window.alert(err);
+				start(null);
+			});
+	}
 });

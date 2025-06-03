@@ -17,12 +17,13 @@ Small and fast.
 ### Configuration
 
 - Reader settings. Settings that control the reader.
-- File-specific styles. Settings for the reader style that apply to the current EPUB.
+- Filewise styles. Settings for the reader style that apply to the current EPUB.
 
 ## TODO
 
+- Fonts (simple) config UI.
+- Parse EPUB myself.
 - SVG content - find a test case.
-- Welcome screen code cleanup - BUG: click-to-open visible.
 - Fetch font from archive
 - Other methods to customize reader (when UI is too narrow).
 - Dark theme.
@@ -32,7 +33,8 @@ Small and fast.
 - Optimize: cache; https://crates.io/crates/lru
 - Optimize: css loading
 - Use keyup and repeat. Make repeat count the distance to jump.
-- Better alert when filepath arg can't be opened. Currently there is only a log.
+- Error handling especially in menus.rs
+- Mimetype application/page-template+xml etc.
 
 ## App persistent state
 
