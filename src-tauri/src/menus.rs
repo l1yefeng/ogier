@@ -231,11 +231,6 @@ pub mod view {
         }
     }
 
-    pub mod more_font_settings {
-        pub const ID: &str = "v_mfs";
-        pub(super) const TEXT: &str = "More font settings";
-    }
-
     pub fn make<R>(window: &tauri::Window<R>) -> tauri::Result<Submenu<R>>
     where
         R: tauri::Runtime,
@@ -245,7 +240,6 @@ pub mod view {
             .text(open_filewise_styles::ID, open_filewise_styles::TEXT)
             .separator()
             .item(&font_preference::make(window)?)
-            .text(more_font_settings::ID, more_font_settings::TEXT)
             .build()
     }
 }
@@ -321,7 +315,6 @@ pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) {
             view::font_preference::handle(app, id)
         }
         view::open_filewise_styles::ID => view::open_filewise_styles::handle(app),
-        view::more_font_settings::ID => handle_by_frontend(app, id),
 
         help::version::ID => (),
         help::website_support::ID => help::website_support::handle(app),

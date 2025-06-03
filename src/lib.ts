@@ -31,7 +31,7 @@ import {
 	loadCustomizationContent,
 } from "./custom";
 import * as rs from "./invoke";
-import { DetailsModal, FontsModal, NavModal, PreviewModal } from "./modal";
+import { DetailsModal, NavModal, PreviewModal } from "./modal";
 import { Styler } from "./styler";
 
 // Elements. Initialized in DOMContentLoaded listener.
@@ -366,10 +366,6 @@ export async function initReaderFrame(
 	// TODO: merge to one rs call
 	initToc();
 	initDetails();
-
-	getCurrentWebviewWindow().listen("menu/v_mfs", () => {
-		FontsModal.get().show();
-	});
 
 	// show reader
 	elemFrame!.style.display = ""; // use display value in css

@@ -24,9 +24,6 @@ pub enum Error {
 
     #[error("The EPUB does not have TOC")]
     EpubHasNoToc,
-
-    #[error("Invalid app prefs file")]
-    InvalidPrefs,
 }
 
 impl Serialize for Error {
