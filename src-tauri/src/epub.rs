@@ -701,6 +701,7 @@ impl<'a, R: Read> Into<Package> for PackageParser<'a, R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn test_parse_container_xml() {
@@ -835,5 +836,77 @@ mod tests {
             assert_eq!(None, spine.toc);
             assert_eq!(vec![String::from("r4915")], spine.itemrefs);
         }
+    }
+
+    const EPUB3_PATH: &str = "src/testing/descartes.epub";
+
+    #[test]
+    fn test_epub3_opens() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB3_PATH);
+        let file = std::fs::File::open(path).expect("Failed to open file");
+        let (epub, _) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
+
+        assert_eq!(Version::Epub3_0, epub.version);
+
+        let title_data = epub.title().expect("Failed to recognize title");
+        assert_eq!(String::from("Philosophical Works"), title_data.value);
+    }
+
+    #[test]
+    fn test_epub3_read_nav() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB3_PATH);
+        let file = std::fs::File::open(path).expect("Failed to open file");
+        let (epub, mut archive) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
+
+        let nav = epub.nav().expect("Failed to recognize nav document");
+        assert_eq!(String::from("application/xhtml+xml"), nav.media_type);
+
+        let mut nav = archive.get_reader(&nav.url).unwrap();
+        let mut nav_content = String::new();
+        nav.read_to_string(&mut nav_content).unwrap();
+
+        assert!(nav_content.contains("epub:type=\"toc\""));
+    }
+
+    #[test]
+    fn test_epub3_spine() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB3_PATH);
+        let file = std::fs::File::open(path).expect("Failed to open file");
+        let (epub, _) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
+
+        let mut page = Some(epub.navigate_to_start());
+
+        // forward
+        for _ in 0..99 {
+            match page {
+                Some(p) => page = epub.navigate_from(&p.url, true).unwrap(),
+                None => break,
+            }
+        }
+        // there's a problem if still navigating after 99 iterations.
+        assert!(page.is_none());
+    }
+
+    #[test]
+    fn test_url_in_epub() {
+        use url::Url;
+
+        let root = Url::parse("epub:/").unwrap();
+        let join = |u: &Url, with| u.join(with).unwrap();
+
+        assert_eq!(root, join(&root, "/"));
+        assert_eq!(root, join(&root, ".."));
+        assert_eq!(
+            join(&root, "text/a.css"),
+            join(&join(&root, "text/a.html"), "a.css")
+        );
+        assert_eq!(
+            join(&root, "nav.html"),
+            join(&join(&root, "text/a.html"), "../nav.html")
+        );
+        assert_eq!(
+            join(&root, "text/a.css"),
+            join(&join(&root, "text/a.html"), "/text/a.css")
+        );
     }
 }

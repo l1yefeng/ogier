@@ -3,15 +3,25 @@
  * `invoke` from Tauri API should not be used anywhere outside this file.
  *
  * TODO: include listeners.
+ *
+ * TODO: lots of renaming (but, rust first).
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { CustomStyles, EpubDetails, EpubNavPoint, EpubToc, SpineItemData } from "./base";
+import {
+	CustomStyles,
+	SpineItemDataAndProgress,
+	EpubDetails,
+	EpubNavPoint,
+	EpubToc,
+	SpineItemData,
+} from "./base";
 
-export function getResource(path: string): Promise<string> {
-	const args = { path };
-	return invoke("get_resource", args);
-}
+// TODO: path is URL
+// export function getResource(path: URL): Promise<string> {
+// 	const args = { path: path.toString() };
+// 	return invoke("get_resource", args);
+// }
 
 export function getDetails(): Promise<EpubDetails> {
 	return invoke("get_details");
@@ -29,7 +39,7 @@ export function getToc(): Promise<EpubToc> {
 			if (!nav) {
 				throw new Error("TOC nav not found.");
 			}
-			toc = { kind: "nav", nav, path: path as string, lang };
+			toc = { kind: "nav", nav, path: new URL(path as string), lang };
 		} else if (result["Ncx"]) {
 			const { root } = result["Ncx"];
 			toc = { kind: "ncx", root: root as EpubNavPoint, lang: "" };
@@ -56,28 +66,48 @@ export function setCustomStyles(styles: CustomStyles): Promise<void> {
 	return invoke("set_custom_stylesheet", args);
 }
 
-export function openEpub(path: string): Promise<[SpineItemData, number | null]> {
-	const args = { path };
-	return invoke("open_epub", args);
+// Throws error if the URL is invalid.
+function jsonToSpineItemData(value: SpineItemData): SpineItemData {
+	value.path = new URL(value.path);
+	return value;
 }
 
-export function openEpubIfLoaded(): Promise<[SpineItemData, number | null] | null> {
-	return invoke("open_epub_if_loaded");
+// Throws error if the URL is invalid.
+function jsonToSpineItemDataAndProgress(
+	value: SpineItemDataAndProgress,
+): SpineItemDataAndProgress {
+	let [item, percentage] = value;
+	return [jsonToSpineItemData(item), percentage];
+}
+
+export function openEpub(path: string) {
+	const args = { path };
+	return invoke<SpineItemDataAndProgress>("open_epub", args).then(
+		jsonToSpineItemDataAndProgress,
+	);
+}
+
+export function openEpubIfLoaded() {
+	return invoke<SpineItemDataAndProgress | null>("open_epub_if_loaded").then(result =>
+		result ? jsonToSpineItemDataAndProgress(result) : null,
+	);
 }
 
 // TODO: Rename the API
-export function moveInSpine(next: boolean): Promise<SpineItemData | null> {
+export function moveInSpine(next: boolean) {
 	const args = { next };
-	return invoke("navigate_adjacent", args);
+	return invoke<SpineItemData | null>("navigate_adjacent", args).then(result =>
+		result ? jsonToSpineItemData(result) : null,
+	);
 }
 
-export function moveToInSpine(path: string): Promise<SpineItemData> {
-	const args = { path };
-	return invoke("navigate_to", args);
+export function moveToInSpine(url: URL) {
+	const args = { path: url.toString() };
+	return invoke<SpineItemData>("navigate_to", args).then(jsonToSpineItemData);
 }
 
-export function reloadBook(): Promise<[SpineItemData, number | null]> {
-	return invoke("reload_book");
+export function reloadBook(): Promise<SpineItemDataAndProgress> {
+	return invoke<SpineItemDataAndProgress>("reload_book").then(jsonToSpineItemDataAndProgress);
 }
 
 export function setReadingPosition(position: number): Promise<void> {

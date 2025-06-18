@@ -4,6 +4,13 @@ import { EpubNavPoint, EpubToc } from "../base";
 import { Context } from "../context";
 import { toc_default_title } from "../strings.json";
 
+/**
+ * The central element is a `<nav>` element.
+ * Input elements within are buttons, each associated with
+ * - value: the target URL
+ * - dataset.path: the pathname of that URL (starts with '/')
+ * - dataset.locationId: the ID in the hash (no '#')
+ */
 export class NavModal extends BaseModal {
 	#title: HTMLElement;
 	#nav: HTMLElement;
@@ -54,11 +61,10 @@ export class NavModal extends BaseModal {
 		}
 	}
 
-	setupTocGoTo(navigate: (path: string, locationId?: string) => any) {
+	setupTocGoTo(navigate: (url: URL) => any) {
 		this.setOnClose(async value => {
 			// If there is no hash, locationId is undefined.
-			const [path, locationId] = value.split("#", 2);
-			await navigate(path, locationId);
+			await navigate(URL.parse(value)!);
 		});
 	}
 
@@ -118,7 +124,7 @@ export class NavModal extends BaseModal {
 	}
 }
 
-function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
+function remakeNavPoints(ol: HTMLOListElement, navDocUrl: URL): void {
 	for (const child of ol.children) {
 		if (child instanceof HTMLLIElement) {
 			const label = document.createElement("button");
@@ -138,21 +144,25 @@ function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
 					label.disabled = false;
 					// relative path
 					let href = grandChild.getAttribute("href") ?? "";
-					if (!href.startsWith("/")) {
-						const parts = navDocPath.split("/");
-						parts.splice(parts.length - 1, 1, href);
-						href = parts.join("/");
+					let path = "";
+					let locationId = "";
+					if (href) {
+						const url = URL.parse(href, navDocUrl);
+						if (url) {
+							href = url.toString();
+							path = url.pathname;
+							locationId = url.hash.slice(1); // empty if hash is empty
+						}
 					}
 					label.value = href;
-					const [path, locationId] = href.split("#", 2);
 					label.dataset.path = path;
-					label.dataset.locationId = locationId ?? "";
+					label.dataset.locationId = locationId;
 					if (grandChild.lang) {
 						label.lang = grandChild.lang;
 					}
 				} else if (grandChild instanceof HTMLOListElement) {
 					ol = grandChild;
-					remakeNavPoints(ol, navDocPath);
+					remakeNavPoints(ol, navDocUrl);
 				}
 			}
 			child.replaceChildren();
@@ -166,6 +176,7 @@ function remakeNavPoints(ol: HTMLOListElement, navDocPath: string): void {
 	}
 }
 
+// TODO: this is wrong but should be unreachable. delete when it's time.
 function createNavPointNcx(navPoint: EpubNavPoint): HTMLLIElement {
 	const elemNavPoint = document.createElement("li");
 

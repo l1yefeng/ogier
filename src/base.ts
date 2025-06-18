@@ -2,18 +2,22 @@
  * Used by anyone.
  */
 
+import { convertFileSrc } from "@tauri-apps/api/core";
+
 export const APP_NAME = "Ogier EPUB Reader";
 
 export interface SpineItemData {
 	// Start from 0, indexing the spine
 	position: number;
 	// Path relative to the archive root. No leading "/" or "epub://", or tailing "/"
-	path: string;
+	path: URL;
 	// File content
 	text: string;
 	// Mimetype
 	mimetype: "application/xhtml+xml" | "image/svg+xml";
 }
+
+export type SpineItemDataAndProgress = [SpineItemData, number | null];
 
 export enum CustomStyleKey {
 	BaseFontSize = "base-font-size",
@@ -32,7 +36,7 @@ export interface EpubNavPoint {
 export type EpubToc =
 	| {
 			kind: "nav";
-			path: string;
+			path: URL;
 			nav: HTMLElement;
 			lang: string;
 	  }
@@ -177,4 +181,8 @@ export class TaskRepeater {
 		f();
 		this.#handle = window.setInterval(f, this.#intervalMs);
 	}
+}
+
+export function toResourceUri(uri: URL): string {
+	return convertFileSrc(uri.pathname.slice(1), "epub");
 }

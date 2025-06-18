@@ -13,7 +13,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose};
-use tauri::{AppHandle, Manager, State, Window};
+use tauri::{AppHandle, Manager, State, Window, http};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::{Store, StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
@@ -262,14 +262,11 @@ fn custom_styles_path(
     Ok(path)
 }
 
-// TODO: rename path -> url
-#[tauri::command]
-fn get_resource(state: State<AppState>, path: url::Url) -> Result<String, AnyErr> {
-    log::debug!("command get_resource[{}]", path);
+fn get_resource(state: State<AppState>, uri: &url::Url) -> Result<(Vec<u8>, String), AnyErr> {
     let (content, mime) = {
         let state_guard = state.lock().unwrap();
         let book = state_guard.book.as_ref().unwrap();
-        let resource = book.resource(&path)?;
+        let resource = book.resource(&uri)?;
         let mime = resource.media_type.clone();
         let mut state_guard = state.lock().unwrap();
         let book_file = state_guard.book_file.as_mut().unwrap();
@@ -277,18 +274,15 @@ fn get_resource(state: State<AppState>, path: url::Url) -> Result<String, AnyErr
         (content, mime)
     };
 
-    if mime.starts_with("image/") {
-        Ok(resource_base64_encode(content, mime))
-    } else if mime.starts_with("text/") {
+    if mime == MIMETYPE_CSS {
         let content = str::from_utf8(&content).map_err(|_| AnyErr::EpubContent)?;
-        if mime == MIMETYPE_CSS {
-            Ok(alter_css(content).unwrap_or(content.into()))
-        } else {
-            Ok(content.into())
-        }
+        let content: String = alter_css(content).unwrap_or(content.into());
+        Ok((content.as_bytes().to_vec(), mime))
     } else {
-        log::warn!("cannot handle because of mimetype: {}", mime);
-        Ok(String::new())
+        if !mime.starts_with("image/") && !mime.starts_with("text/") {
+            log::warn!("suspicious mimetype: {}", mime);
+        }
+        Ok((content, mime))
     }
 }
 
@@ -514,6 +508,14 @@ fn open_epub_if_loaded(
     book_get_init_page(&mut state_guard, &progress_store).map(Some)
 }
 
+fn convert_internal_uri(uri_in_request: &http::Uri) -> Result<url::Url, url::ParseError> {
+    // TODO see warnings of `register_uri_scheme_protocol` about cross-platform
+    debug_assert_eq!(uri_in_request.scheme_str(), Some("epub"));
+    let path = uri_in_request.path();
+    debug_assert!(!path.starts_with("/localhost"));
+    url::Url::parse("epub:/").and_then(|u| u.join(path))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(filepath: Option<PathBuf>) {
     tauri::Builder::default()
@@ -537,10 +539,38 @@ pub fn run(filepath: Option<PathBuf>) {
             }
             Ok(())
         })
+        .register_uri_scheme_protocol("epub", |ctx, request| {
+            let Ok(uri) = convert_internal_uri(request.uri()) else {
+                return http::Response::builder()
+                    .status(http::StatusCode::BAD_REQUEST)
+                    .body(Vec::new())
+                    .unwrap();
+            };
+
+            log::debug!("handling request {}", uri);
+
+            let app = ctx.app_handle();
+            let state = app.state::<AppState>();
+            match get_resource(state, &uri) {
+                Ok((content, mime)) => http::Response::builder()
+                    .status(http::StatusCode::OK)
+                    .header(http::header::CONTENT_TYPE, mime)
+                    .body(content)
+                    .unwrap(),
+                Err(AnyErr::EpubUrlNotFound(_)) => http::Response::builder()
+                    .status(http::StatusCode::NOT_FOUND)
+                    .body(Vec::new())
+                    .unwrap(),
+                Err(e) => http::Response::builder()
+                    .status(http::StatusCode::BAD_REQUEST)
+                    .body(e.to_string().as_bytes().to_vec())
+                    .unwrap(),
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_custom_stylesheet,
             get_details,
-            get_resource,
+            // get_resource,
             get_toc,
             navigate_adjacent,
             navigate_to,

@@ -9,7 +9,7 @@ import { load } from "@tauri-apps/plugin-store";
 
 import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./strings.json";
 
-import { SpineItemData, takeSessionInProgress } from "./base";
+import { SpineItemDataAndProgress, takeSessionInProgress } from "./base";
 import { Context } from "./context";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
@@ -71,7 +71,7 @@ function showClickToOpen(yes: boolean): HTMLElement {
 	return elem;
 }
 
-function start(read: null | [SpineItemData, number | null]): void {
+function start(read: null | SpineItemDataAndProgress): void {
 	if (read) {
 		const [spineItem, percentage] = read;
 		initReaderFrame(spineItem, percentage); // don't wait

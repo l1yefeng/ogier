@@ -79,25 +79,25 @@ export class Styler {
 		await this.#appCss.replace(css);
 	}
 
-	load(paths: string[]): Promise<void> {
+	load(urls: URL[]): Promise<void> {
 		this.#readerRoot.adoptedStyleSheets.splice(
 			3,
 			this.#readerRoot.adoptedStyleSheets.length - 3,
 		);
 
-		const promises = paths.map(path =>
+		const promises = urls.map(url =>
 			new Promise((resolve: (value: CSSStyleSheet) => void, reject) => {
-				if (this.#linkedCssResources[path]) {
-					return resolve(this.#linkedCssResources[path]);
+				if (this.#linkedCssResources[url.pathname]) {
+					return resolve(this.#linkedCssResources[url.pathname]);
 				}
 
-				rs.getResource(path).then(css => {
+				rs.getResource(url).then(css => {
 					if (!css) {
-						return reject(`Resource not found: ${path}`);
+						return reject(`Resource not found: ${url}`);
 					}
 					const stylesheet = new CSSStyleSheet();
 					stylesheet.replace(css);
-					this.#linkedCssResources[path] = stylesheet;
+					this.#linkedCssResources[url.pathname] = stylesheet;
 					return resolve(stylesheet);
 				});
 			}).then(stylesheet => {

@@ -1,52 +1,52 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OgierEPUB",
-  "version": "0.0.1",
-  "identifier": "xyz.lyfeng.ogier",
-  "build": {
-    "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "withGlobalTauri": true,
-    "windows": [
-      {
-        "label": "main",
-        "title": "OgierEPUB",
-        "width": 800,
-        "height": 600,
-        "zoomHotkeysEnabled": true
-      }
-    ],
-    "security": {
-      "csp": null
-    }
-  },
-  "bundle": {
-    "active": true,
-    "fileAssociations": [
-      {
-        "description": "EPUB",
-        "ext": ["epub"],
-        "mimeType": "application/epub+zip",
-        "role": "Viewer"
-      }
-    ],
-    "shortDescription": "Boring simple EPUB reader",
-    "category": "Utility",
-    "targets": [
-      "appimage",
-      "nsis",
-      "app"
-    ],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
-  }
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "OgierEPUB",
+	"version": "0.0.1",
+	"identifier": "xyz.lyfeng.ogier",
+	"build": {
+		"beforeDevCommand": "bun run dev",
+		"devUrl": "http://localhost:1420",
+		"beforeBuildCommand": "bun run build",
+		"frontendDist": "../dist"
+	},
+	"app": {
+		"withGlobalTauri": true,
+		"windows": [
+			{
+				"label": "main",
+				"title": "OgierEPUB",
+				"width": 800,
+				"height": 600,
+				"zoomHotkeysEnabled": true
+			}
+		],
+		"security": {
+			"assetProtocol": {
+				"enable": true,
+				"scope": []
+			},
+			"csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' epub: http://epub.localhost; style-src 'self' epub: http://epub.localhost"
+		}
+	},
+	"bundle": {
+		"active": true,
+		"fileAssociations": [
+			{
+				"description": "EPUB",
+				"ext": ["epub"],
+				"mimeType": "application/epub+zip",
+				"role": "Viewer"
+			}
+		],
+		"shortDescription": "Boring simple EPUB reader",
+		"category": "Utility",
+		"targets": ["appimage", "nsis", "app"],
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		]
+	}
 }

@@ -19,9 +19,9 @@ import {
 	getCurrentPositionPx,
 	isLocationNear,
 	markSessionInProgress,
-	repairEpubHref,
 	SpineItemData,
 	TaskRepeater,
+	toResourceUri,
 } from "./base";
 import { Context } from "./context";
 import {
@@ -63,22 +63,12 @@ export function loadContent(): void {
 
 function loadImageElement(
 	elem: HTMLImageElement | SVGImageElement,
-	path: string,
-	useDataBase64: (base64: string) => void,
+	url: URL,
+	useUri: (uri: string) => void,
 ): void {
-	elem.style.visibility = "hidden";
-	rs.getResource(path)
-		.then(base64 => {
-			if (base64) {
-				useDataBase64(base64);
-				elem.style.visibility = "";
-			} else {
-				console.error(`Resource not found: ${path}`);
-			}
-		})
-		.catch(err => {
-			console.error(`Error loading image ${path}:`, err);
-		});
+	// TODO: debugging, and meanwhile maybe we use `register_asynchronous_uri_scheme_protocol`
+	console.debug(`ENTER: loadImageElement(${url})`);
+	useUri(toResourceUri(url));
 }
 
 /**
@@ -86,14 +76,22 @@ function loadImageElement(
  *
  * @param head `<head>` element of the page the reader is loading.
  */
-async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
-	const linkedPaths = [];
+async function loadPageStyles(
+	head: HTMLHeadElement,
+	currentDocUrl: URL,
+): Promise<HTMLLinkElement[]> {
+	// const linkedUrls: URL[] = [];
+	const stylesheetLinks: HTMLLinkElement[] = [];
 	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
-		const path = elemLink.href.substring(7);
-		linkedPaths.push(path);
-		elemLink.remove();
+		const uri = URL.parse(elemLink.getAttribute("href") ?? "", currentDocUrl);
+		if (uri) {
+			elemLink.href = toResourceUri(uri);
+			stylesheetLinks.push(elemLink);
+			// linkedUrls.push(url);
+			// elemLink.remove();
+		}
 	}
-	await styler!.load(linkedPaths);
+	// await styler!.load(linkedUrls);
 
 	let cssInPage = "";
 	for (const elemStyle of head.querySelectorAll<HTMLStyleElement>("style")) {
@@ -106,15 +104,18 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<void> {
 
 	// TODO(opt) can be parallel?
 	await styler!.loadAppPrefs();
+	return stylesheetLinks;
 }
 
 async function renderBookPage(
 	spineItem: SpineItemData,
 	percentage: number | null,
 ): Promise<void> {
+	console.debug("ENTER: renderBookPage");
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
 
+	console.debug("parsing doc");
 	const parser = new DOMParser();
 	const pageDoc = parser.parseFromString(spineItem.text, spineItem.mimetype);
 	Context.spineItemLang = pageDoc.documentElement.lang;
@@ -122,28 +123,32 @@ async function renderBookPage(
 	const pageBody = pageDoc.body;
 
 	// load all images: <img> and svg <image>
-	for (const elem of pageBody.querySelectorAll<HTMLImageElement>('img[src^="epub://"]')) {
-		loadImageElement(elem, elem.src.substring(7), base64 => {
-			elem.src = `data:${base64}`;
-		});
+	for (const elem of pageBody.querySelectorAll<HTMLImageElement>("img")) {
+		const url = URL.parse(elem.src, spineItem.path);
+		if (url) {
+			loadImageElement(elem, url, uri => {
+				elem.src = uri;
+			});
+		}
 	}
 	for (const elem of pageBody.querySelectorAll<SVGImageElement>("image")) {
-		const href = elem.href.baseVal;
-		if (href.startsWith("epub://")) {
-			loadImageElement(elem, href.substring(7), base64 => {
-				elem.href.baseVal = `data:${base64}`;
+		const url = URL.parse(elem.href.baseVal, spineItem.path);
+		if (url) {
+			loadImageElement(elem, url, uri => {
+				elem.href.baseVal = uri;
 			});
 		}
 	}
 
-	// repair anchor element hrefs
-	new Promise(() => {
-		for (const elem of pageBody.querySelectorAll<HTMLAnchorElement>('a[href^="epub://"]')) {
-			repairEpubHref(elem, spineItem.path);
-		}
-	});
+	// // repair anchor element hrefs
+	// new Promise(() => {
+	// 	for (const elem of pageBody.querySelectorAll<HTMLAnchorElement>('a[href^="epub://"]')) {
+	// 		repairEpubHref(elem, spineItem.path);
+	// 	}
+	// });
 
-	await loadPageStyles(pageDoc.head);
+	console.debug("CALL: loadPageStyles (skipped)");
+	const stylesheetLinks = await loadPageStyles(pageDoc.head, spineItem.path);
 
 	let customStyles: Partial<CustomStyles>;
 	try {
@@ -157,7 +162,7 @@ async function renderBookPage(
 	activateCustomizationInput(localStylesCommit, rs.setCustomStyles);
 
 	// insert the body
-	readerShadowRoot!.appendChild(pageBody);
+	readerShadowRoot!.append(...stylesheetLinks, pageBody);
 	if (percentage != null) {
 		const top = getCurrentPositionInverse(
 			elemReaderHost!.getBoundingClientRect(),
@@ -173,7 +178,7 @@ async function renderBookPage(
 		const hostRect = elemReaderHost!.getBoundingClientRect();
 		const bodyRect = pageBody.getBoundingClientRect();
 		const btn = NavModal.get().mostRecentNavPoint(
-			spineItem.path,
+			spineItem.path.pathname,
 			getCurrentPositionPx(hostRect, bodyRect),
 			id => {
 				const target = readerShadowRoot!.getElementById(id);
@@ -267,21 +272,23 @@ function previewSamePageLocation(anchor: HTMLElement, elemNoteId: string): void 
 	}
 }
 
-async function navigateTo(path: string, locationId?: string): Promise<void> {
+async function navigateTo(url: URL): Promise<void> {
 	let spineItemData: SpineItemData | null;
+	const id = url.hash.slice(1);
+	url.hash = "";
 	try {
-		spineItemData = await rs.moveToInSpine(path);
+		spineItemData = await rs.moveToInSpine(url);
 	} catch (err) {
-		console.error(`Error jumping to ${path}:`, err);
+		console.error(`Error jumping to ${url}:`, err);
 		return;
 	}
 	await renderBookPage(spineItemData, 0.0);
-	if (locationId) {
-		readerShadowRoot!.getElementById(locationId)?.scrollIntoView();
+	if (id) {
+		readerShadowRoot!.getElementById(id)?.scrollIntoView();
 	}
 }
 
-function handleClickInReader(event: PointerEvent): void {
+function handleClickInReader(event: PointerEvent, currentDocUrl: URL): void {
 	// find the nearest nesting anchor
 	if (!(event.target instanceof Element)) {
 		return;
@@ -296,29 +303,30 @@ function handleClickInReader(event: PointerEvent): void {
 		if (elemNoteId) {
 			previewSamePageLocation(elemAnchor, elemNoteId);
 		} else {
-			const href = elemAnchor.href;
-			if (href.startsWith("epub://")) {
-				const [path, locationId] = elemAnchor.href.substring(7).split("#", 2);
-				navigateTo(path, locationId);
-			} else if (
-				href.startsWith("http://") ||
-				href.startsWith("https://") ||
-				href.startsWith("mailto:") ||
-				href.startsWith("tel:")
-			) {
-				// open externally
-				confirm(`Open ${href} using system default application`, {
-					title: "Confirm",
-					kind: "warning",
-				})
-					.then(confirmed => {
-						if (confirmed) {
-							return openUrl(href);
-						}
+			const url = URL.parse(elemAnchor.getAttribute("href") ?? "", currentDocUrl);
+			if (url) {
+				if (
+					url.protocol == "http:" ||
+					url.protocol == "https:" ||
+					url.protocol == "mailto:" ||
+					url.protocol == "tel:"
+				) {
+					// open externally
+					confirm(`Open ${url} using system default application`, {
+						title: "Confirm",
+						kind: "warning",
 					})
-					.catch(err => {
-						window.alert(`Error opening ${href}: ${err}`);
-					});
+						.then(confirmed => {
+							if (confirmed) {
+								return openUrl(url);
+							}
+						})
+						.catch(err => {
+							window.alert(`Error opening ${url}: ${err}`);
+						});
+				} else {
+					navigateTo(url);
+				}
 			}
 		}
 	}
@@ -376,7 +384,7 @@ export async function initReaderFrame(
 	// setup reader event listeners
 	document.body.onkeydown = handleKeyEvent;
 	readerShadowRoot.addEventListener("click", event =>
-		handleClickInReader(event as PointerEvent),
+		handleClickInReader(event as PointerEvent, spineItem.path),
 	);
 	elemTocButton!.onclick = () => NavModal.get().show();
 
