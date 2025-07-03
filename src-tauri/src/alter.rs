@@ -196,27 +196,21 @@ fn transform_xhtml(xhtml: &str) -> Result<Vec<u8>, quick_xml::Error> {
 
             Event::Start(ref e) => {
                 if let Ok(Some(attr)) = e.try_get_attribute("style") {
-                    replace = attr
-                        .unescape_value()
-                        .map_or(None, |css| Some(css))
-                        .and_then(|css| alter_css(&css))
-                        .map(|css| {
-                            let mut start = e.to_owned();
-                            start.clear_attributes();
-                            e.attributes().for_each(|attr| {
-                                if let Ok(attr) = attr {
-                                    if attr.key.0.eq_ignore_ascii_case(b"style") {
-                                        start.push_attribute(Attribute::from((
-                                            "style",
-                                            css.as_str(),
-                                        )));
-                                    } else {
-                                        start.push_attribute(attr);
-                                    }
+                    let css = String::from_utf8_lossy(&attr.value);
+                    replace = alter_css(&css).map(|css| {
+                        let mut start = e.to_owned();
+                        start.clear_attributes();
+                        e.attributes().for_each(|attr| {
+                            if let Ok(attr) = attr {
+                                if attr.key.0.eq_ignore_ascii_case(b"style") {
+                                    start.push_attribute(Attribute::from(("style", css.as_str())));
+                                } else {
+                                    start.push_attribute(attr);
                                 }
-                            });
-                            Event::Start(start)
+                            }
                         });
+                        Event::Start(start)
+                    });
                 }
             }
             _ => {}

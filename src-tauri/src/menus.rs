@@ -4,7 +4,6 @@
 // - Tidy the `use` or qualifiers
 
 use tauri::{Emitter, menu::Menu};
-use tauri_plugin_store::StoreExt;
 
 use crate::prefs::FontPrefer;
 
@@ -126,6 +125,11 @@ pub mod view {
         const TEXT: &str = "Font preference";
 
         pub fn handle(app: &tauri::AppHandle, id: &str) {
+            let Ok(prefs_store) = app.store(crate::PREFS_STORE) else {
+                log::error!("Could not open preferences store");
+                return;
+            };
+
             // ensure at most one is checked
             let menu = app
                 .menu()
@@ -150,7 +154,7 @@ pub mod view {
             } else {
                 None
             };
-            let _ = set(&menu, font_pref);
+            let _ = set(&menu, font_pref, &prefs_store);
         }
 
         pub mod sans_serif {
@@ -177,7 +181,8 @@ pub mod view {
         pub fn set<R>(
             submenu: &Submenu<R>,
             value: Option<FontPrefer>,
-        ) -> Result<(), crate::error::Error>
+            prefs_store: &tauri_plugin_store::Store<R>,
+        ) -> Result<(), tauri::Error>
         where
             R: tauri::Runtime,
         {
@@ -203,7 +208,6 @@ pub mod view {
                 None => serde_json::Value::Null,
             };
             // save prefs
-            let prefs_store = submenu.app_handle().store(crate::PREFS_STORE)?;
             prefs_store.set("font.prefer", json_value.clone());
 
             // notify the front-end
@@ -337,7 +341,10 @@ where
 }
 
 /// Returns true if updated. The function does nothing if the menu has been updated.
-pub fn update<R>(window: &tauri::Window<R>) -> crate::CmdResult<bool>
+pub fn update<R>(
+    window: &tauri::Window<R>,
+    prefs_store: &tauri_plugin_store::Store<R>,
+) -> Result<bool, tauri::Error>
 where
     R: tauri::Runtime,
 {
@@ -355,10 +362,7 @@ where
     menu.insert(&view_submenu, 1)?;
 
     // font prefer init value
-    let font_prefer_value = {
-        let prefs = window.store(crate::PREFS_STORE)?;
-        prefs.get("font.prefer")
-    };
+    let font_prefer_value = prefs_store.get("font.prefer");
     set_font_preference(
         &window,
         match font_prefer_value {
@@ -368,6 +372,7 @@ where
             Some(serde_json::Value::String(value)) if value == "serif" => Some(FontPrefer::Serif),
             _ => None,
         },
+        prefs_store,
     )?;
 
     Ok(true)
@@ -376,7 +381,8 @@ where
 fn set_font_preference<R>(
     window: &tauri::Window<R>,
     value: Option<FontPrefer>,
-) -> Result<(), crate::error::Error>
+    prefs_store: &tauri_plugin_store::Store<R>,
+) -> Result<(), tauri::Error>
 where
     R: tauri::Runtime,
 {
@@ -386,6 +392,6 @@ where
     let font_preference = view.get(view::font_preference::ID).unwrap();
     let font_preference = font_preference.as_submenu_unchecked();
 
-    view::font_preference::set(font_preference, value)?;
+    view::font_preference::set(font_preference, value, prefs_store)?;
     Ok(())
 }
