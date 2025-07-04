@@ -75,18 +75,27 @@ impl<R: Read + Seek> EpubArchive<R> {
     }
 }
 
-/// item reference in manifest and position in spine
-struct ResourceIndex(usize, Option<usize>);
+pub struct ResourceInfo {
+    pub media_type: String,
+    pub properties: Option<package::PropertiesValue>,
+}
+
+type ResourceIndex = usize;
 
 pub struct Epub {
     base_url: url::Url,
     version: package::Version,
     metadata: package::Metadata,
-    resources: Vec<package::ResourceItem>,
-    spine: Vec<usize>,
+    /// Info of resources appearing in manifest.
+    /// The first *k* items are in spine in that order
+    /// where *k* is the size of `spine`.
+    resources: Vec<ResourceInfo>,
+    /// Length of spine. See `resources`.
+    spine: Vec<url::Url>,
+    /// Indexes, mapping URLs to index in `resources`.
     resource_indexes: HashMap<url::Url, ResourceIndex>,
-    legacy_toc: Option<usize>,
-    legacy_cover: Option<usize>,
+    legacy_toc: Option<url::Url>,
+    legacy_cover: Option<url::Url>,
 }
 
 impl Epub {
@@ -152,29 +161,35 @@ impl Epub {
             let key = package_doc_url
                 .join(&item.href)
                 .map_err(|_| OneOf::new(EpubError::InvalidHref))?;
-            let ri = resources.len();
-            let si = spine.len();
-            spine.push(ri);
-            resources.push(item);
-            resource_indexes.insert(key, ResourceIndex(ri, Some(si)));
+
             if legacy_toc_id.is_some_and(|id| *id == itemref.idref) {
-                legacy_toc = Some(ri);
+                legacy_toc = Some(key.clone());
             }
             if legacy_cover_id
                 .as_ref()
                 .is_some_and(|id| *id == itemref.idref)
             {
-                legacy_cover = Some(ri);
+                legacy_cover = Some(key.clone());
             }
+
+            let ri: ResourceIndex = resources.len();
+            spine.push(key.clone());
+            resources.push(ResourceInfo {
+                media_type: item.media_type,
+                properties: item.properties,
+            });
+            resource_indexes.insert(key, ri);
         }
         for item in package.manifest.into_values() {
             let key = package_doc_url
                 .join(&item.href)
                 .map_err(|_| OneOf::new(EpubError::InvalidHref))?;
             let ri = resources.len();
-            spine.push(ri);
-            resources.push(item);
-            resource_indexes.insert(key, ResourceIndex(ri, None));
+            resources.push(ResourceInfo {
+                media_type: item.media_type,
+                properties: item.properties,
+            });
+            resource_indexes.insert(key, ri);
         }
 
         let epub = Epub {
@@ -190,58 +205,62 @@ impl Epub {
         Ok((epub, archive))
     }
 
-    pub fn navigate_from(
-        &self,
-        current: &url::Url,
-        forward: bool,
-    ) -> Result<Option<&package::ResourceItem>, UrlNotFoundErr> {
-        let Some(ResourceIndex(_ri, si)) = self.resource_indexes.get(current) else {
-            return Err(UrlNotFoundErr);
-        };
-        let Some(si) = si.clone() else {
-            // not in spine
-            return Ok(None);
-        };
-        let si = if forward {
-            if si == self.spine.len() - 1 {
-                return Ok(None);
-            }
-            si + 1
-        } else {
-            if si == 0 {
-                return Ok(None);
-            }
-            si - 1
-        };
-        let ri = self.spine[si];
-        Ok(Some(&self.resources[ri]))
-    }
+    // pub fn navigate_from(
+    //     &self,
+    //     current: &url::Url,
+    //     forward: bool,
+    // ) -> Result<Option<&package::ResourceItem>, UrlNotFoundErr> {
+    //     let Some(ResourceIndex(_ri, si)) = self.resource_indexes.get(current) else {
+    //         return Err(UrlNotFoundErr);
+    //     };
+    //     let Some(si) = si.clone() else {
+    //         // not in spine
+    //         return Ok(None);
+    //     };
+    //     let si = if forward {
+    //         if si == self.spine.len() - 1 {
+    //             return Ok(None);
+    //         }
+    //         si + 1
+    //     } else {
+    //         if si == 0 {
+    //             return Ok(None);
+    //         }
+    //         si - 1
+    //     };
+    //     let ri = self.spine[si];
+    //     Ok(Some(&self.resources[ri]))
+    // }
 
-    /// Returns the content document item the navigation arrives at, and
-    /// whether this item is in the spine.
-    pub fn navigate_to(
-        &self,
-        dest: &url::Url,
-    ) -> Result<(&package::ResourceItem, bool), UrlNotFoundErr> {
-        let Some(ResourceIndex(ri, si)) = self.resource_indexes.get(dest) else {
-            return Err(UrlNotFoundErr);
-        };
-        Ok((&self.resources[*ri], si.is_some()))
-    }
+    // /// Returns the content document item the navigation arrives at, and
+    // /// whether this item is in the spine.
+    // pub fn navigate_to(
+    //     &self,
+    //     dest: &url::Url,
+    // ) -> Result<(&package::ResourceItem, bool), UrlNotFoundErr> {
+    //     let Some(ResourceIndex(ri, si)) = self.resource_indexes.get(dest) else {
+    //         return Err(UrlNotFoundErr);
+    //     };
+    //     Ok((&self.resources[*ri], si.is_some()))
+    // }
 
-    pub fn navigate_to_start(&self) -> &package::ResourceItem {
+    pub fn navigate_to_start(&self) -> &url::Url {
         // TODO proper landing page
-        &self.resources[0]
+        &self.spine[0]
     }
 
     pub fn metadata(&self) -> &package::Metadata {
         &self.metadata
     }
 
-    pub fn resource(&self, u: &url::Url) -> Result<&package::ResourceItem, UrlNotFoundErr> {
+    pub fn spine(&self) -> &Vec<url::Url> {
+        &self.spine
+    }
+
+    pub fn resource(&self, u: &url::Url) -> Result<&ResourceInfo, UrlNotFoundErr> {
         self.resource_indexes
             .get(u)
-            .map(|ResourceIndex(ri, _si)| &self.resources[*ri])
+            .map(|i| &self.resources[*i])
             .ok_or(UrlNotFoundErr)
     }
 
@@ -249,29 +268,45 @@ impl Epub {
         self.metadata.iter().find(|item| item.property == "title")
     }
 
-    pub fn cover(&self) -> Option<&package::ResourceItem> {
+    pub fn cover(&self) -> Option<&url::Url> {
         if self.version == package::Version::Epub3_0 {
-            if let Some(item) = self.resources.iter().find(|item| {
+            if let Some((url, _i)) = self.resource_indexes.iter().find(|(_url, i)| {
+                let item: &ResourceInfo = self
+                    .resources
+                    .get(**i)
+                    .expect("Value in resource_indexes is in bound");
                 item.properties
                     .as_ref()
                     .is_some_and(|value| value.has("cover-image"))
             }) {
-                return Some(item);
+                return Some(url);
             }
         }
 
-        self.legacy_cover.map(|ri| &self.resources[ri])
+        self.legacy_cover.as_ref()
     }
 
-    pub fn nav(&self) -> Option<&package::ResourceItem> {
+    pub fn nav(&self) -> Option<&url::Url> {
         match self.version {
-            package::Version::Epub3_0 => self.resources.iter().find(|item| {
-                item.properties
-                    .as_ref()
-                    .is_some_and(|value| value.has("nav"))
-            }),
+            package::Version::Epub3_0 => self
+                .resource_indexes
+                .iter()
+                .find(|(_url, i)| {
+                    let item: &ResourceInfo = self
+                        .resources
+                        .get(**i)
+                        .expect("Value in resource_indexes is in bound");
+                    item.properties
+                        .as_ref()
+                        .is_some_and(|value| value.has("nav"))
+                })
+                .map(|(url, _i)| url),
             package::Version::Epub2_0 => None,
         }
+    }
+
+    pub fn legacy_toc(&self) -> &Option<url::Url> {
+        &self.legacy_toc
     }
 }
 
@@ -357,14 +392,17 @@ mod tests {
         let file = std::fs::File::open(path).expect("Failed to open file");
         let (epub, mut archive) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
 
-        let nav = epub.nav().expect("Failed to recognize nav document");
-        assert_eq!(String::from("application/xhtml+xml"), nav.media_type);
+        let nav_url = epub.nav().expect("Failed to recognize nav document");
+        assert_eq!(
+            String::from("application/xhtml+xml"),
+            epub.resource(nav_url).unwrap().media_type
+        );
 
-        // let mut nav = archive.get_reader(&nav.url).unwrap();
-        // let mut nav_content = String::new();
-        // nav.read_to_string(&mut nav_content).unwrap();
+        let mut nav = archive.get_reader(nav_url).unwrap();
+        let mut nav_content = String::new();
+        nav.read_to_string(&mut nav_content).unwrap();
 
-        // assert!(nav_content.contains("epub:type=\"toc\""));
+        assert!(nav_content.contains("epub:type=\"toc\""));
     }
 
     #[test]

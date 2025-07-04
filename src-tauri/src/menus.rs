@@ -44,7 +44,7 @@ pub mod file {
             // TODO emit error to front end, and it can be used in lib.rs too
             let _ = app
                 .opener()
-                .reveal_item_in_dir(&state_guard.book_file_info.path);
+                .reveal_item_in_dir(&state_guard.opened_pub.as_ref().unwrap().path);
         }
     }
 

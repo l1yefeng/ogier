@@ -18,6 +18,9 @@ pub enum AnyErr {
     EpubContent,
     #[error("EPUB navigation file is missing")]
     EpubNoNav,
+    // else
+    #[error("Unknown internal error")]
+    Unknown,
 }
 
 impl serde::Serialize for AnyErr {
