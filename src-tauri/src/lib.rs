@@ -26,16 +26,26 @@ type EpubHash = arrayvec::ArrayString<16>;
 #[derive(serde::Serialize)]
 struct AboutPub {
     // file
+    #[serde(rename(serialize = "filePath"))]
     pub file_path: PathBuf,
+    #[serde(rename(serialize = "fileSize"))]
     pub file_size: u64,
+    #[serde(rename(serialize = "fileCreated"))]
     pub file_created: u128,
+    #[serde(rename(serialize = "fileModified"))]
     pub file_modified: u128,
     // epub
+    #[serde(rename(serialize = "pubMetadata"))]
     pub pub_metadata: epub::package::Metadata,
+    #[serde(rename(serialize = "pubSpine"))]
     pub pub_spine: Vec<Url>,
+    #[serde(rename(serialize = "pubCoverUrl"))]
     pub pub_cover_url: Option<Url>,
+    #[serde(rename(serialize = "pubTocUrl"))]
     pub pub_toc_url: Option<Url>,
+    #[serde(rename(serialize = "pubTocIsLegacy"))]
     pub pub_toc_is_legacy: bool,
+    #[serde(rename(serialize = "pubLandingPage"))]
     pub pub_landing_page: Url,
 }
 
@@ -615,6 +625,7 @@ pub fn run(filepath: Option<PathBuf>) {
             match pub_get_resource_and_media_type(state_guard.opened_pub.as_mut().unwrap(), &uri) {
                 Ok(BytesAndMediaType(content, mime)) => http::Response::builder()
                     .status(http::StatusCode::OK)
+                    .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                     .header(http::header::CONTENT_TYPE, mime)
                     .body(content)
                     .unwrap(),

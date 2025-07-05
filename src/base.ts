@@ -4,7 +4,71 @@
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-export const APP_NAME = "Ogier EPUB Reader";
+export const APP_NAME = "OgierEPUB";
+
+export interface AboutPubJson {
+	// file
+	filePath: string;
+	fileSize: number;
+	fileCreated: number;
+	fileModified: number;
+	// epub
+	pubMetadata: EpubMetadata;
+	pubSpine: string[];
+	pubCoverUrl: string | null;
+	pubTocUrl: string | null;
+	pubTocIsLegacy: boolean;
+	pubLandingPage: string;
+}
+export interface AboutPub {
+	// file
+	filePath: string;
+	fileSize: number;
+	fileCreated: Date | null;
+	fileModified: Date | null;
+	// epub
+	pubMetadata: EpubMetadata;
+	pubSpine: URL[];
+	pubCoverUrl: URL | null;
+	pubTocUrl: URL | null;
+	pubTocIsLegacy: boolean;
+	pubLandingPage: URL;
+}
+
+export function aboutPubFromJson(json: AboutPubJson): AboutPub {
+	const {
+		filePath,
+		fileSize,
+		fileCreated,
+		fileModified,
+		pubMetadata,
+		pubSpine,
+		pubCoverUrl,
+		pubTocUrl,
+		pubTocIsLegacy,
+		pubLandingPage,
+	} = json;
+
+	const dateFromMs = (ms: number) => {
+		if (ms == 0) return null;
+		const date = new Date();
+		date.setTime(ms);
+		return date;
+	};
+
+	return {
+		filePath,
+		fileSize,
+		fileCreated: dateFromMs(fileCreated),
+		fileModified: dateFromMs(fileModified),
+		pubMetadata,
+		pubSpine: pubSpine.map(s => URL.parse(s)!),
+		pubCoverUrl: pubCoverUrl == null ? null : URL.parse(pubCoverUrl)!,
+		pubTocUrl: pubTocUrl == null ? null : URL.parse(pubTocUrl)!,
+		pubTocIsLegacy,
+		pubLandingPage: URL.parse(pubLandingPage)!,
+	};
+}
 
 export interface SpineItemData {
 	// Start from 0, indexing the spine

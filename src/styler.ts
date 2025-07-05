@@ -1,6 +1,5 @@
 import { clamp, CustomStyleKey, CustomStyles, FontPrefer } from "./base";
 import { Context } from "./context";
-import * as rs from "./invoke";
 
 export class Styler {
 	#readerRoot: ShadowRoot;
@@ -79,40 +78,40 @@ export class Styler {
 		await this.#appCss.replace(css);
 	}
 
-	load(urls: URL[]): Promise<void> {
-		this.#readerRoot.adoptedStyleSheets.splice(
-			3,
-			this.#readerRoot.adoptedStyleSheets.length - 3,
-		);
+	// load(urls: URL[]): Promise<void> {
+	// 	this.#readerRoot.adoptedStyleSheets.splice(
+	// 		3,
+	// 		this.#readerRoot.adoptedStyleSheets.length - 3,
+	// 	);
 
-		const promises = urls.map(url =>
-			new Promise((resolve: (value: CSSStyleSheet) => void, reject) => {
-				if (this.#linkedCssResources[url.pathname]) {
-					return resolve(this.#linkedCssResources[url.pathname]);
-				}
+	// 	const promises = urls.map(url =>
+	// 		new Promise((resolve: (value: CSSStyleSheet) => void, reject) => {
+	// 			if (this.#linkedCssResources[url.pathname]) {
+	// 				return resolve(this.#linkedCssResources[url.pathname]);
+	// 			}
 
-				rs.getResource(url).then(css => {
-					if (!css) {
-						return reject(`Resource not found: ${url}`);
-					}
-					const stylesheet = new CSSStyleSheet();
-					stylesheet.replace(css);
-					this.#linkedCssResources[url.pathname] = stylesheet;
-					return resolve(stylesheet);
-				});
-			}).then(stylesheet => {
-				this.#readerRoot.adoptedStyleSheets.push(stylesheet);
-			}),
-		);
+	// 			rs.getResource(url).then(css => {
+	// 				if (!css) {
+	// 					return reject(`Resource not found: ${url}`);
+	// 				}
+	// 				const stylesheet = new CSSStyleSheet();
+	// 				stylesheet.replace(css);
+	// 				this.#linkedCssResources[url.pathname] = stylesheet;
+	// 				return resolve(stylesheet);
+	// 			});
+	// 		}).then(stylesheet => {
+	// 			this.#readerRoot.adoptedStyleSheets.push(stylesheet);
+	// 		}),
+	// 	);
 
-		return Promise.allSettled(promises).then(results => {
-			for (const result of results) {
-				if (result.status == "rejected") {
-					console.error(`Failed to load css: ${result.reason}`);
-				}
-			}
-		});
-	}
+	// 	return Promise.allSettled(promises).then(results => {
+	// 		for (const result of results) {
+	// 			if (result.status == "rejected") {
+	// 				console.error(`Failed to load css: ${result.reason}`);
+	// 			}
+	// 		}
+	// 	});
+	// }
 
 	setStyleElemsCss(css: string): void {
 		this.#styleElemsCss.replace(css);

@@ -9,6 +9,7 @@ import {
 } from "./strings.json";
 
 import {
+	AboutPub,
 	anchoredSamePageLocation,
 	CustomStyles,
 	EpubDetails,
@@ -61,29 +62,26 @@ export function loadContent(): void {
 	loadCustomizationContent();
 }
 
-function loadImageElement(
-	elem: HTMLImageElement | SVGImageElement,
-	url: URL,
-	useUri: (uri: string) => void,
-): void {
-	// TODO: debugging, and meanwhile maybe we use `register_asynchronous_uri_scheme_protocol`
-	console.debug(`ENTER: loadImageElement(${url})`);
-	useUri(toResourceUri(url));
-}
+// function loadImageElement(
+// 	elem: HTMLImageElement | SVGImageElement,
+// 	url: URL,
+// 	useUri: (uri: string) => void,
+// ): void {
+// 	// TODO: debugging, and meanwhile maybe we use `register_asynchronous_uri_scheme_protocol`
+// 	console.debug(`ENTER: loadImageElement(${url})`);
+// 	useUri(toResourceUri(url));
+// }
 
 /**
  * Call this at some point during the loading of a page (Docuemnt).
  *
  * @param head `<head>` element of the page the reader is loading.
  */
-async function loadPageStyles(
-	head: HTMLHeadElement,
-	currentDocUrl: URL,
-): Promise<HTMLLinkElement[]> {
+async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]> {
 	// const linkedUrls: URL[] = [];
 	const stylesheetLinks: HTMLLinkElement[] = [];
 	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
-		const uri = URL.parse(elemLink.getAttribute("href") ?? "", currentDocUrl);
+		const uri = URL.parse(elemLink.getAttribute("href") ?? "", Context.readingPositionUrl!);
 		if (uri) {
 			elemLink.href = toResourceUri(uri);
 			stylesheetLinks.push(elemLink);
@@ -107,48 +105,86 @@ async function loadPageStyles(
 	return stylesheetLinks;
 }
 
-async function renderBookPage(
-	spineItem: SpineItemData,
-	percentage: number | null,
-): Promise<void> {
+function fetchContentDoc(url: URL): Promise<Document> {
+	const uri = toResourceUri(url);
+	console.debug(`fetchContentDoc ${uri}`);
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open("GET", uri);
+		// TODO: use exact same origin? see https://docs.rs/tauri/2.6.2/tauri/struct.Builder.html#method.register_uri_scheme_protocol
+		xhr.setRequestHeader("Accept", "application/xhtml+xml");
+		xhr.setRequestHeader("Accept", "image/svg+xml");
+		xhr.onerror = reject;
+		xhr.onload = () => {
+			// TODO: confirm svg works
+			const doc = xhr.responseXML;
+			if (doc == null) {
+				throw new Error("null XML in response");
+			}
+			resolve(doc);
+		};
+		xhr.send();
+	});
+}
+
+async function setReadingPositionInSpine(url: URL): Promise<void> {
+	const index = Context.openedEpub!.pubSpine.findIndex(
+		itemUrl => url.pathname == itemUrl.pathname,
+	);
+	if (index < 0) {
+		console.error("Did not find current URL in spine!");
+		return;
+	}
+	Context.readingPositionInSpine = index;
+}
+
+async function renderBookPage(url: URL, percentage: number | null): Promise<void> {
 	console.debug("ENTER: renderBookPage");
+	Context.readingPositionUrl = url;
+	setReadingPositionInSpine(url); // don't wait
+
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
 
 	console.debug("parsing doc");
-	const parser = new DOMParser();
-	const pageDoc = parser.parseFromString(spineItem.text, spineItem.mimetype);
-	Context.spineItemLang = pageDoc.documentElement.lang;
+	const doc = await fetchContentDoc(url);
+	Context.spineItemLang = doc.documentElement.lang;
 	elemReaderHost!.lang = Context.spineItemLang || Context.epubLang;
-	const pageBody = pageDoc.body;
+	const pageBody = doc.body;
 
 	// load all images: <img> and svg <image>
 	for (const elem of pageBody.querySelectorAll<HTMLImageElement>("img")) {
-		const url = URL.parse(elem.src, spineItem.path);
-		if (url) {
-			loadImageElement(elem, url, uri => {
-				elem.src = uri;
-			});
+		const imgUrl = URL.parse(elem.src, url);
+		if (imgUrl) {
+			elem.src = toResourceUri(imgUrl);
+			// loadImageElement(elem, elemUrl, uri => {
+			// 	elem.src = uri;
+			// });
 		}
 	}
 	for (const elem of pageBody.querySelectorAll<SVGImageElement>("image")) {
-		const url = URL.parse(elem.href.baseVal, spineItem.path);
-		if (url) {
-			loadImageElement(elem, url, uri => {
-				elem.href.baseVal = uri;
-			});
+		const imgUrl = URL.parse(elem.href.baseVal, url);
+		if (imgUrl) {
+			elem.href.baseVal = toResourceUri(imgUrl);
+			// loadImageElement(elem, imgUrl, uri => {
+			// 	elem.href.baseVal = uri;
+			// });
 		}
 	}
 
-	// // repair anchor element hrefs
-	// new Promise(() => {
-	// 	for (const elem of pageBody.querySelectorAll<HTMLAnchorElement>('a[href^="epub://"]')) {
-	// 		repairEpubHref(elem, spineItem.path);
-	// 	}
-	// });
+	// repair anchor element hrefs
+	new Promise(() => {
+		for (const elem of pageBody.querySelectorAll<HTMLAnchorElement>("a")) {
+			const resourceUrl = URL.parse(elem.getAttribute("href")!, url);
+			if (resourceUrl) {
+				elem.href = toResourceUri(resourceUrl);
+				// repairEpubHref(elem, spineItem.path);
+			}
+		}
+	});
 
 	console.debug("CALL: loadPageStyles (skipped)");
-	const stylesheetLinks = await loadPageStyles(pageDoc.head, spineItem.path);
+	const stylesheetLinks = await loadPageStyles(doc.head);
 
 	let customStyles: Partial<CustomStyles>;
 	try {
@@ -172,13 +208,13 @@ async function renderBookPage(
 		elemReaderHost!.scroll({ top, behavior: "instant" });
 	}
 
-	elemSpinePosition!.textContent = `Position: ${spineItem.position} / ${Context.spineLength!}`;
+	elemSpinePosition!.textContent = `to be removed`;
 
 	refreshTocBtnLabelTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();
 		const bodyRect = pageBody.getBoundingClientRect();
 		const btn = NavModal.get().mostRecentNavPoint(
-			spineItem.path.pathname,
+			url.pathname,
 			getCurrentPositionPx(hostRect, bodyRect),
 			id => {
 				const target = readerShadowRoot!.getElementById(id);
@@ -199,7 +235,7 @@ async function renderBookPage(
 	saveReadingProgressTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();
 		const bodyRect = pageBody.getBoundingClientRect();
-		rs.setReadingPosition(getCurrentPosition(hostRect, bodyRect));
+		Context.readingPositionPercentage = getCurrentPosition(hostRect, bodyRect);
 	});
 
 	markSessionInProgress();
@@ -273,22 +309,15 @@ function previewSamePageLocation(anchor: HTMLElement, elemNoteId: string): void 
 }
 
 async function navigateTo(url: URL): Promise<void> {
-	let spineItemData: SpineItemData | null;
 	const id = url.hash.slice(1);
 	url.hash = "";
-	try {
-		spineItemData = await rs.moveToInSpine(url);
-	} catch (err) {
-		console.error(`Error jumping to ${url}:`, err);
-		return;
-	}
-	await renderBookPage(spineItemData, 0.0);
+	await renderBookPage(url, 0.0);
 	if (id) {
 		readerShadowRoot!.getElementById(id)?.scrollIntoView();
 	}
 }
 
-function handleClickInReader(event: PointerEvent, currentDocUrl: URL): void {
+function handleClickInReader(event: PointerEvent): void {
 	// find the nearest nesting anchor
 	if (!(event.target instanceof Element)) {
 		return;
@@ -303,7 +332,7 @@ function handleClickInReader(event: PointerEvent, currentDocUrl: URL): void {
 		if (elemNoteId) {
 			previewSamePageLocation(elemAnchor, elemNoteId);
 		} else {
-			const url = URL.parse(elemAnchor.getAttribute("href") ?? "", currentDocUrl);
+			const url = URL.parse(elemAnchor.getAttribute("href") ?? "", Context.readingPositionUrl!);
 			if (url) {
 				if (
 					url.protocol == "http:" ||
@@ -335,7 +364,10 @@ function handleClickInReader(event: PointerEvent, currentDocUrl: URL): void {
 async function initDetails(): Promise<void> {
 	let details: EpubDetails;
 	try {
-		details = await rs.getDetails();
+		const { pubMetadata, pubCoverUrl } = Context.openedEpub!;
+		console.debug(`Init details with (cover: ${pubCoverUrl})`, pubMetadata);
+		throw new Error("Unimplemented: initDetails");
+		// details = await rs.getDetails();
 	} catch (err) {
 		console.error("Error loading metadata:", err);
 		return;
@@ -353,7 +385,10 @@ async function initDetails(): Promise<void> {
 async function initToc(): Promise<void> {
 	let result: EpubToc;
 	try {
-		result = await rs.getToc();
+		const { pubTocUrl, pubTocIsLegacy } = Context.openedEpub!;
+		console.debug(`Init toc with ${pubTocUrl} (legacy: ${pubTocIsLegacy})`);
+		throw new Error("Unimplemented: initToc");
+		// result = await rs.getToc();
 	} catch (err) {
 		console.error("Error loading TOC:", err);
 		elemTocButton!.disabled = true;
@@ -367,10 +402,9 @@ async function initToc(): Promise<void> {
 	getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
 }
 
-export async function initReaderFrame(
-	spineItem: SpineItemData,
-	percentage: number | null,
-): Promise<void> {
+export async function initReaderFrame(about: AboutPub): Promise<void> {
+	Context.openedEpub = about;
+
 	// TODO: merge to one rs call
 	initToc();
 	initDetails();
@@ -384,7 +418,7 @@ export async function initReaderFrame(
 	// setup reader event listeners
 	document.body.onkeydown = handleKeyEvent;
 	readerShadowRoot.addEventListener("click", event =>
-		handleClickInReader(event as PointerEvent, spineItem.path),
+		handleClickInReader(event as PointerEvent),
 	);
 	elemTocButton!.onclick = () => NavModal.get().show();
 
@@ -392,21 +426,26 @@ export async function initReaderFrame(
 		styler!.loadAppPrefs();
 	});
 
-	renderBookPage(spineItem, percentage);
+	// TODO: progress
+	const url = about.pubLandingPage;
+	renderBookPage(url, null);
 }
 
-function moveInSpine(next: boolean): void {
-	rs.moveInSpine(next)
-		.then(result => {
-			if (result) {
-				renderBookPage(result, next ? 0.0 : 1.0);
-			} else {
-				window.alert(end_of_spine_message);
-			}
-		})
-		.catch(err => {
-			console.error("Error loading next chapter:", err);
-		});
+function moveInSpine(forward: boolean): void {
+	const spine = Context.openedEpub!.pubSpine;
+	let index = Context.readingPositionInSpine;
+	if (index == null) {
+		console.error("Fix this");
+		return;
+	}
+
+	index += forward ? +1 : -1;
+	if (index < 0 || index >= spine.length) {
+		window.alert(end_of_spine_message);
+		return;
+	}
+	const percentage = forward ? 0.0 : 1.0;
+	renderBookPage(spine[index], percentage);
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {

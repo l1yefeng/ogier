@@ -9,7 +9,7 @@ import { load } from "@tauri-apps/plugin-store";
 
 import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./strings.json";
 
-import { SpineItemDataAndProgress, takeSessionInProgress } from "./base";
+import { AboutPub, takeSessionInProgress } from "./base";
 import { Context } from "./context";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
@@ -57,9 +57,9 @@ function enableDragAndDrop(): void {
 function openChosenFileAt(path: string): Promise<void> {
 	return rs
 		.openEpub(path)
-		.then(([spineItem, percentage]) => {
+		.then(about => {
 			showClickToOpen(false);
-			initReaderFrame(spineItem, percentage); // don't wait
+			initReaderFrame(about); // don't wait
 		})
 		.catch(window.alert);
 }
@@ -71,10 +71,9 @@ function showClickToOpen(yes: boolean): HTMLElement {
 	return elem;
 }
 
-function start(read: null | SpineItemDataAndProgress): void {
-	if (read) {
-		const [spineItem, percentage] = read;
-		initReaderFrame(spineItem, percentage); // don't wait
+function start(about: null | AboutPub): void {
+	if (about) {
+		initReaderFrame(about); // don't wait
 	} else {
 		showWelcomeScreen();
 	}
