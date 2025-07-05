@@ -8,17 +8,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import {
-	CustomStyles,
-	SpineItemDataAndProgress,
-	EpubDetails,
-	EpubNavPoint,
-	EpubToc,
-	SpineItemData,
-	AboutPub,
-	AboutPubJson,
-	aboutPubFromJson,
-} from "./base";
+import { CustomStyles, AboutPub, AboutPubJson, aboutPubFromJson } from "./base";
 
 // TODO: path is URL
 // export function getResource(path: URL): Promise<string> {
@@ -67,20 +57,6 @@ export function getCustomStyles(): Promise<Partial<CustomStyles> | null> {
 export function setCustomStyles(styles: CustomStyles): Promise<void> {
 	const args = { content: JSON.stringify(styles, undefined, 2) };
 	return invoke("set_custom_stylesheet", args);
-}
-
-// Throws error if the URL is invalid.
-function jsonToSpineItemData(value: SpineItemData): SpineItemData {
-	value.path = new URL(value.path);
-	return value;
-}
-
-// Throws error if the URL is invalid.
-function jsonToSpineItemDataAndProgress(
-	value: SpineItemDataAndProgress,
-): SpineItemDataAndProgress {
-	let [item, percentage] = value;
-	return [jsonToSpineItemData(item), percentage];
 }
 
 export function openEpub(path: string): Promise<AboutPub> {

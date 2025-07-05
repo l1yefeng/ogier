@@ -2,8 +2,6 @@
  * Used by anyone.
  */
 
-import { convertFileSrc } from "@tauri-apps/api/core";
-
 export const APP_NAME = "OgierEPUB";
 
 export interface AboutPubJson {
@@ -70,45 +68,12 @@ export function aboutPubFromJson(json: AboutPubJson): AboutPub {
 	};
 }
 
-export interface SpineItemData {
-	// Start from 0, indexing the spine
-	position: number;
-	// Path relative to the archive root. No leading "/" or "epub://", or tailing "/"
-	path: URL;
-	// File content
-	text: string;
-	// Mimetype
-	mimetype: "application/xhtml+xml" | "image/svg+xml";
-}
-
-export type SpineItemDataAndProgress = [SpineItemData, number | null];
-
 export enum CustomStyleKey {
 	BaseFontSize = "base-font-size",
 	LineHeightScale = "line-height-scale",
 	InlineMargin = "inline-margin",
 }
 export type CustomStyles = Record<CustomStyleKey, number>;
-
-export interface EpubNavPoint {
-	label: string;
-	content: string;
-	playOrder: number;
-	children: EpubNavPoint[];
-}
-
-export type EpubToc =
-	| {
-			kind: "nav";
-			path: URL;
-			nav: HTMLElement;
-			lang: string;
-	  }
-	| {
-			kind: "ncx";
-			root: EpubNavPoint;
-			lang: string;
-	  };
 
 interface EpubExprBase {
 	property: string;
@@ -122,21 +87,6 @@ export interface EpubMetadataItem extends EpubExprBase {
 	refined: EpubMetadataRefinement[];
 }
 export type EpubMetadata = EpubMetadataItem[];
-
-export interface EpubFileInfo {
-	path: string;
-	size: number;
-	created: number;
-	modified: number;
-}
-
-export interface EpubDetails {
-	fileInfo: EpubFileInfo;
-	metadata: EpubMetadata;
-	spineLength: number;
-	displayTitle: string;
-	coverBase64: string;
-}
 
 /**
  * Checks if `locationId` matches `elem` or nearby elements.
@@ -164,25 +114,6 @@ export function isLocationNear(locationId: string, elem: Element): boolean {
 		return true;
 	}
 	return false;
-}
-
-/**
- * @requires href value starts with epub://. This is ensured by rs.
- */
-export function repairEpubHref(anchor: HTMLAnchorElement, currentPath: string): void {
-	const value = anchor.getAttribute("href");
-	if (!value) {
-		return;
-	}
-	const hashIndex = value.lastIndexOf("#");
-	if (hashIndex <= 0) {
-		return;
-	}
-	if (value[hashIndex - 1] == "/") {
-		anchor.href = value.substring(hashIndex);
-	} else if (value.substring(7, hashIndex) == currentPath) {
-		anchor.href = value.substring(hashIndex);
-	}
 }
 
 export function anchoredSamePageLocation(elem: HTMLAnchorElement): string | null {
@@ -245,8 +176,4 @@ export class TaskRepeater {
 		f();
 		this.#handle = window.setInterval(f, this.#intervalMs);
 	}
-}
-
-export function toResourceUri(uri: URL): string {
-	return convertFileSrc(uri.pathname.slice(1), "epub");
 }

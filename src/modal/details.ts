@@ -1,7 +1,8 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
 import { Context } from "../context";
-import { EpubDetails, EpubMetadataItem } from "../base";
+import { EpubMetadataItem } from "../base";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 export class DetailsModal extends BaseModal {
 	#bookDl: HTMLDListElement;
@@ -18,32 +19,36 @@ export class DetailsModal extends BaseModal {
 		ModalCoordinator.modals["details"] = this;
 	}
 
-	init(details: EpubDetails): void {
+	init(): void {
 		this.locked = false;
-		if (details.coverBase64) {
-			this.#coverImg.src = `data:${details.coverBase64}`;
+		const about = Context.openedEpub!;
+		if (about.pubCoverUrl) {
+			// TODO move to utils because it is copied from lib.ts
+			this.#coverImg.src = convertFileSrc(about.pubCoverUrl.pathname.slice(1), "epub");
 			this.#coverImg.nextElementSibling?.remove();
 		} else {
 			const h = document.createElement("h1");
-			h.textContent = details.displayTitle;
+			// TODO: extract to utils and fallback to filename
+			h.textContent =
+				about.pubMetadata.find(item => item.property == "title")?.value ?? "Untitled";
 			this.#coverImg.replaceWith(h);
 		}
 
-		this.#bookDl.replaceChildren(...details.metadata.flatMap(createDetailsDlItemRich));
+		this.#bookDl.replaceChildren(...about.pubMetadata.flatMap(createDetailsDlItemRich));
 
 		this.#fileDl.replaceChildren();
-		this.#fileDl.append(...createDetailsDlItem("Path", details.fileInfo.path));
+		this.#fileDl.append(...createDetailsDlItem("Path", about.filePath));
 		this.#fileDl.append(
-			...createDetailsDlItem("Size", `${details.fileInfo.size.toLocaleString()} bytes`),
+			...createDetailsDlItem("Size", `${about.fileSize.toLocaleString()} bytes`),
 		);
-		if (details.fileInfo.created) {
+		if (about.fileCreated) {
 			this.#fileDl.append(
-				...createDetailsDlItem("Created at", timeStringFromMs(details.fileInfo.created)),
+				...createDetailsDlItem("Created at", about.fileCreated.toLocaleString()),
 			);
 		}
-		if (details.fileInfo.modified) {
+		if (about.fileModified) {
 			this.#fileDl.append(
-				...createDetailsDlItem("Modified at", timeStringFromMs(details.fileInfo.modified)),
+				...createDetailsDlItem("Modified at", about.fileModified.toLocaleString()),
 			);
 		}
 	}
@@ -58,12 +63,6 @@ export class DetailsModal extends BaseModal {
 		if (!DetailsModal.self) DetailsModal.self = new DetailsModal();
 		return DetailsModal.self;
 	}
-}
-
-function timeStringFromMs(ms: number): string {
-	const date = new Date();
-	date.setTime(ms);
-	return date.toLocaleString();
 }
 
 function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
@@ -95,11 +94,11 @@ function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
 	// dd
 	if (data.lang) {
 		dd.lang = data.lang;
-	} else if (Context.epubLang) {
+	} else if (Context.getEpubLang()) {
 		if (
 			["contributor", "creator", "description", "publisher", "title"].includes(data.property)
 		) {
-			dd.lang = Context.epubLang;
+			dd.lang = Context.getEpubLang();
 		}
 	}
 	dd.innerHTML = data.value;

@@ -15,7 +15,7 @@ export class PreviewModal extends BaseModal {
 	show(floatingContentRoot: HTMLElement): void {
 		if (ModalCoordinator.show(this)) {
 			this.#contentDiv.replaceChildren(...floatingContentRoot.childNodes);
-			this.#contentDiv.lang = Context.spineItemLang || Context.epubLang;
+			this.#contentDiv.lang = Context.spineItemLang || Context.getEpubLang();
 		}
 	}
 

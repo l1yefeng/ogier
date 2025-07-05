@@ -1,3 +1,4 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -12,17 +13,13 @@ import {
 	AboutPub,
 	anchoredSamePageLocation,
 	CustomStyles,
-	EpubDetails,
-	EpubToc,
 	FontPrefer,
 	getCurrentPosition,
 	getCurrentPositionInverse,
 	getCurrentPositionPx,
 	isLocationNear,
 	markSessionInProgress,
-	SpineItemData,
 	TaskRepeater,
-	toResourceUri,
 } from "./base";
 import { Context } from "./context";
 import {
@@ -127,21 +124,9 @@ function fetchContentDoc(url: URL): Promise<Document> {
 	});
 }
 
-async function setReadingPositionInSpine(url: URL): Promise<void> {
-	const index = Context.openedEpub!.pubSpine.findIndex(
-		itemUrl => url.pathname == itemUrl.pathname,
-	);
-	if (index < 0) {
-		console.error("Did not find current URL in spine!");
-		return;
-	}
-	Context.readingPositionInSpine = index;
-}
-
 async function renderBookPage(url: URL, percentage: number | null): Promise<void> {
 	console.debug("ENTER: renderBookPage");
 	Context.readingPositionUrl = url;
-	setReadingPositionInSpine(url); // don't wait
 
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
@@ -149,7 +134,7 @@ async function renderBookPage(url: URL, percentage: number | null): Promise<void
 	console.debug("parsing doc");
 	const doc = await fetchContentDoc(url);
 	Context.spineItemLang = doc.documentElement.lang;
-	elemReaderHost!.lang = Context.spineItemLang || Context.epubLang;
+	elemReaderHost!.lang = Context.spineItemLang || Context.getEpubLang();
 	const pageBody = doc.body;
 
 	// load all images: <img> and svg <image>
@@ -362,28 +347,14 @@ function handleClickInReader(event: PointerEvent): void {
 }
 
 async function initDetails(): Promise<void> {
-	let details: EpubDetails;
-	try {
-		const { pubMetadata, pubCoverUrl } = Context.openedEpub!;
-		console.debug(`Init details with (cover: ${pubCoverUrl})`, pubMetadata);
-		throw new Error("Unimplemented: initDetails");
-		// details = await rs.getDetails();
-	} catch (err) {
-		console.error("Error loading metadata:", err);
-		return;
-	}
-
-	Context.epubLang = details.metadata.find(item => item.property == "language")?.value ?? "";
 	NavModal.get().onContextLangChange();
-	Context.spineLength = details.spineLength;
 	const modal = DetailsModal.get();
-	modal.init(details);
+	modal.init();
 
 	getCurrentWebviewWindow().listen("menu/f_d", () => modal.show());
 }
 
 async function initToc(): Promise<void> {
-	let result: EpubToc;
 	try {
 		const { pubTocUrl, pubTocIsLegacy } = Context.openedEpub!;
 		console.debug(`Init toc with ${pubTocUrl} (legacy: ${pubTocIsLegacy})`);
@@ -395,11 +366,11 @@ async function initToc(): Promise<void> {
 		elemTocButton!.title = toc_unavailable_message;
 		return;
 	}
-	const modal = NavModal.get();
-	modal.init(result);
-	modal.setupTocGoTo(navigateTo);
+	// const modal = NavModal.get();
+	// modal.init(result);
+	// modal.setupTocGoTo(navigateTo);
 
-	getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
+	// getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
 }
 
 export async function initReaderFrame(about: AboutPub): Promise<void> {
@@ -433,11 +404,7 @@ export async function initReaderFrame(about: AboutPub): Promise<void> {
 
 function moveInSpine(forward: boolean): void {
 	const spine = Context.openedEpub!.pubSpine;
-	let index = Context.readingPositionInSpine;
-	if (index == null) {
-		console.error("Fix this");
-		return;
-	}
+	let index = Context.getReadingPositionInSpine();
 
 	index += forward ? +1 : -1;
 	if (index < 0 || index >= spine.length) {
@@ -471,4 +438,8 @@ function handleKeyEvent(event: KeyboardEvent): void {
 		event.preventDefault();
 		DetailsModal.get().show();
 	}
+}
+
+function toResourceUri(uri: URL): string {
+	return convertFileSrc(uri.pathname.slice(1), "epub");
 }

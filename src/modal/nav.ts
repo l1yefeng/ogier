@@ -1,6 +1,5 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { EpubNavPoint, EpubToc } from "../base";
 import { Context } from "../context";
 import { toc_default_title } from "../strings.json";
 
@@ -52,7 +51,7 @@ export class NavModal extends BaseModal {
 		}
 
 		this.#nav.replaceChildren(ol);
-		this.#nav.lang = lang || Context.epubLang;
+		this.#nav.lang = lang || Context.getEpubLang();
 	}
 
 	show(): void {
@@ -107,7 +106,7 @@ export class NavModal extends BaseModal {
 	}
 
 	onContextLangChange(): void {
-		const lang = Context.epubLang;
+		const lang = Context.getEpubLang();
 		if (lang) {
 			// If already set, it is perhaps set when creating the nav using its own lang
 			if (!this.#nav.lang) {
