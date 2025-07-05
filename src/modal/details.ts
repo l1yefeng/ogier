@@ -1,8 +1,7 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
 import { Context } from "../context";
-import { EpubMetadataItem } from "../base";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { EpubMetadataItem, setElementUrl } from "../base";
 
 export class DetailsModal extends BaseModal {
 	#bookDl: HTMLDListElement;
@@ -21,10 +20,9 @@ export class DetailsModal extends BaseModal {
 
 	init(): void {
 		this.locked = false;
-		const about = Context.openedEpub!;
+		const about = Context.getOpenedEpub();
 		if (about.pubCoverUrl) {
-			// TODO move to utils because it is copied from lib.ts
-			this.#coverImg.src = convertFileSrc(about.pubCoverUrl.pathname.slice(1), "epub");
+			setElementUrl(this.#coverImg, about.pubCoverUrl);
 			this.#coverImg.nextElementSibling?.remove();
 		} else {
 			const h = document.createElement("h1");

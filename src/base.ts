@@ -2,6 +2,8 @@
  * Used by anyone.
  */
 
+import { convertFileSrc } from "@tauri-apps/api/core";
+
 export const APP_NAME = "OgierEPUB";
 
 export interface AboutPubJson {
@@ -176,4 +178,49 @@ export class TaskRepeater {
 		f();
 		this.#handle = window.setInterval(f, this.#intervalMs);
 	}
+}
+
+function toResourceUri(uri: URL): string {
+	return convertFileSrc(uri.pathname.slice(1), "epub");
+}
+
+export function setElementUrl(
+	element: HTMLAnchorElement | HTMLImageElement | SVGImageElement | HTMLLinkElement,
+	url: URL,
+): void {
+	const tauriUrl = toResourceUri(url);
+	if (element instanceof HTMLAnchorElement) {
+		element.href = tauriUrl;
+	} else if (element instanceof HTMLImageElement) {
+		element.src = tauriUrl;
+	} else if (element instanceof SVGImageElement) {
+		element.href.baseVal = tauriUrl;
+	} else if (element instanceof HTMLLinkElement) {
+		element.href = tauriUrl;
+	}
+}
+
+export function fetchXml(url: URL, mimeTypes?: string[]): Promise<Document> {
+	const tauriUrl = toResourceUri(url);
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open("GET", tauriUrl);
+		if (mimeTypes) {
+			for (const mt of mimeTypes) {
+				xhr.setRequestHeader("Accept", mt);
+			}
+		}
+		xhr.setRequestHeader("Accept", "application/xhtml+xml");
+		xhr.setRequestHeader("Accept", "image/svg+xml");
+		xhr.onerror = reject;
+		xhr.onload = () => {
+			// TODO: confirm svg works
+			const doc = xhr.responseXML;
+			if (doc == null) {
+				throw new Error("null XML in response");
+			}
+			resolve(doc);
+		};
+		xhr.send();
+	});
 }

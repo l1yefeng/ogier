@@ -1,4 +1,3 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -13,12 +12,14 @@ import {
 	AboutPub,
 	anchoredSamePageLocation,
 	CustomStyles,
+	fetchXml,
 	FontPrefer,
 	getCurrentPosition,
 	getCurrentPositionInverse,
 	getCurrentPositionPx,
 	isLocationNear,
 	markSessionInProgress,
+	setElementUrl,
 	TaskRepeater,
 } from "./base";
 import { Context } from "./context";
@@ -78,9 +79,11 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]>
 	// const linkedUrls: URL[] = [];
 	const stylesheetLinks: HTMLLinkElement[] = [];
 	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
-		const uri = URL.parse(elemLink.getAttribute("href") ?? "", Context.readingPositionUrl!);
-		if (uri) {
-			elemLink.href = toResourceUri(uri);
+		const href = elemLink.getAttribute("href");
+		if (!href) continue;
+		const url = URL.parse(href, Context.getReadingPositionUrl());
+		if (url) {
+			setElementUrl(elemLink, url);
 			stylesheetLinks.push(elemLink);
 			// linkedUrls.push(url);
 			// elemLink.remove();
@@ -102,37 +105,15 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]>
 	return stylesheetLinks;
 }
 
-function fetchContentDoc(url: URL): Promise<Document> {
-	const uri = toResourceUri(url);
-	console.debug(`fetchContentDoc ${uri}`);
-	return new Promise((resolve, reject) => {
-		const xhr = new XMLHttpRequest();
-		xhr.open("GET", uri);
-		// TODO: use exact same origin? see https://docs.rs/tauri/2.6.2/tauri/struct.Builder.html#method.register_uri_scheme_protocol
-		xhr.setRequestHeader("Accept", "application/xhtml+xml");
-		xhr.setRequestHeader("Accept", "image/svg+xml");
-		xhr.onerror = reject;
-		xhr.onload = () => {
-			// TODO: confirm svg works
-			const doc = xhr.responseXML;
-			if (doc == null) {
-				throw new Error("null XML in response");
-			}
-			resolve(doc);
-		};
-		xhr.send();
-	});
-}
-
 async function renderBookPage(url: URL, percentage: number | null): Promise<void> {
 	console.debug("ENTER: renderBookPage");
-	Context.readingPositionUrl = url;
+	Context.setReadingPositionUrl(url);
 
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
 
 	console.debug("parsing doc");
-	const doc = await fetchContentDoc(url);
+	const doc = await fetchXml(url);
 	Context.spineItemLang = doc.documentElement.lang;
 	elemReaderHost!.lang = Context.spineItemLang || Context.getEpubLang();
 	const pageBody = doc.body;
@@ -141,19 +122,13 @@ async function renderBookPage(url: URL, percentage: number | null): Promise<void
 	for (const elem of pageBody.querySelectorAll<HTMLImageElement>("img")) {
 		const imgUrl = URL.parse(elem.src, url);
 		if (imgUrl) {
-			elem.src = toResourceUri(imgUrl);
-			// loadImageElement(elem, elemUrl, uri => {
-			// 	elem.src = uri;
-			// });
+			setElementUrl(elem, imgUrl);
 		}
 	}
 	for (const elem of pageBody.querySelectorAll<SVGImageElement>("image")) {
 		const imgUrl = URL.parse(elem.href.baseVal, url);
 		if (imgUrl) {
-			elem.href.baseVal = toResourceUri(imgUrl);
-			// loadImageElement(elem, imgUrl, uri => {
-			// 	elem.href.baseVal = uri;
-			// });
+			setElementUrl(elem, imgUrl);
 		}
 	}
 
@@ -162,8 +137,7 @@ async function renderBookPage(url: URL, percentage: number | null): Promise<void
 		for (const elem of pageBody.querySelectorAll<HTMLAnchorElement>("a")) {
 			const resourceUrl = URL.parse(elem.getAttribute("href")!, url);
 			if (resourceUrl) {
-				elem.href = toResourceUri(resourceUrl);
-				// repairEpubHref(elem, spineItem.path);
+				setElementUrl(elem, resourceUrl);
 			}
 		}
 	});
@@ -317,7 +291,10 @@ function handleClickInReader(event: PointerEvent): void {
 		if (elemNoteId) {
 			previewSamePageLocation(elemAnchor, elemNoteId);
 		} else {
-			const url = URL.parse(elemAnchor.getAttribute("href") ?? "", Context.readingPositionUrl!);
+			const url = URL.parse(
+				elemAnchor.getAttribute("href") ?? "",
+				Context.getReadingPositionUrl(),
+			);
 			if (url) {
 				if (
 					url.protocol == "http:" ||
@@ -355,26 +332,22 @@ async function initDetails(): Promise<void> {
 }
 
 async function initToc(): Promise<void> {
+	const modal = NavModal.get();
 	try {
-		const { pubTocUrl, pubTocIsLegacy } = Context.openedEpub!;
-		console.debug(`Init toc with ${pubTocUrl} (legacy: ${pubTocIsLegacy})`);
-		throw new Error("Unimplemented: initToc");
-		// result = await rs.getToc();
+		await modal.init();
 	} catch (err) {
 		console.error("Error loading TOC:", err);
 		elemTocButton!.disabled = true;
 		elemTocButton!.title = toc_unavailable_message;
 		return;
 	}
-	// const modal = NavModal.get();
-	// modal.init(result);
-	// modal.setupTocGoTo(navigateTo);
+	modal.setupTocGoTo(navigateTo);
 
-	// getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
+	getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
 }
 
 export async function initReaderFrame(about: AboutPub): Promise<void> {
-	Context.openedEpub = about;
+	Context.setOpenedEpub(about);
 
 	// TODO: merge to one rs call
 	initToc();
@@ -403,7 +376,7 @@ export async function initReaderFrame(about: AboutPub): Promise<void> {
 }
 
 function moveInSpine(forward: boolean): void {
-	const spine = Context.openedEpub!.pubSpine;
+	const spine = Context.getOpenedEpub().pubSpine;
 	let index = Context.getReadingPositionInSpine();
 
 	index += forward ? +1 : -1;
@@ -438,8 +411,4 @@ function handleKeyEvent(event: KeyboardEvent): void {
 		event.preventDefault();
 		DetailsModal.get().show();
 	}
-}
-
-function toResourceUri(uri: URL): string {
-	return convertFileSrc(uri.pathname.slice(1), "epub");
 }

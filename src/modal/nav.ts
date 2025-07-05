@@ -2,6 +2,7 @@ import { BaseModal, ModalCoordinator } from "./base";
 
 import { Context } from "../context";
 import { toc_default_title } from "../strings.json";
+import { fetchXml } from "../base";
 
 /**
  * The central element is a `<nav>` element.
@@ -25,33 +26,19 @@ export class NavModal extends BaseModal {
 		ModalCoordinator.modals["nav"] = this;
 	}
 
-	init(toc: EpubToc): void {
+	async init(): Promise<void> {
 		this.locked = false;
-		let ol: HTMLOListElement;
-		this.#title.replaceChildren(toc_default_title);
-		let lang;
-		if (toc.kind == "ncx") {
-			if (toc.root.label) {
-				this.#title.replaceChildren(toc.root.label);
-			}
-			ol = document.createElement("ol");
-			ol.append(...toc.root.children.map(createNavPointNcx));
-			lang = toc.lang;
-		} else {
-			const { nav, path } = toc;
-			const originalHeading = [...nav.children].find(
-				child => child instanceof HTMLHeadingElement,
-			);
-			if (originalHeading) {
-				this.#title.replaceChildren(...originalHeading.childNodes);
-			}
-			ol = [...nav.children].find(child => child instanceof HTMLOListElement)!;
-			remakeNavPoints(ol, path);
-			lang = nav.lang || toc.lang;
+		const { pubTocUrl: url, pubTocIsLegacy: isLegacy } = Context.getOpenedEpub();
+		if (!url) {
+			throw new Error("No TOC");
 		}
+		const doc = await fetchXml(url);
 
-		this.#nav.replaceChildren(ol);
-		this.#nav.lang = lang || Context.getEpubLang();
+		if (isLegacy) {
+			makeUiFromNcx(doc, url, this.#nav, this.#title);
+		} else {
+			makeUiFromNav(doc, url, this.#nav, this.#title);
+		}
 	}
 
 	show(): void {
@@ -123,24 +110,77 @@ export class NavModal extends BaseModal {
 	}
 }
 
-function remakeNavPoints(ol: HTMLOListElement, navDocUrl: URL): void {
+function makeUiFromNcx(
+	doc: Document,
+	url: URL,
+	navElem: HTMLElement,
+	titleElem: HTMLElement,
+): void {
+	// find and set title
+	const docTitleElem = doc.querySelector("docTitle");
+	if (docTitleElem) {
+		titleElem.textContent = docTitleElem.firstElementChild!.textContent!.trim();
+	} else {
+		titleElem.textContent = toc_default_title;
+	}
+
+	// find and convert <navMap>
+	const navMap = doc.querySelector("navMap")!;
+	const ol = document.createElement("ol");
+	for (const navPoint of navMap.children) {
+		ol.appendChild(makeUiLiFromNcxNavPoint(navPoint, url));
+	}
+	navElem.replaceChildren(ol);
+
+	navElem.lang = doc.documentElement.lang || Context.getEpubLang();
+}
+
+function makeUiFromNav(
+	doc: Document,
+	url: URL,
+	navElem: HTMLElement,
+	titleElem: HTMLElement,
+): void {
+	// find <nav> in doc
+	const nav = doc.querySelector<HTMLElement>("nav:has(>ol)");
+	if (!nav) {
+		throw new Error("No proper nav in XML");
+	}
+
+	// set title
+	const originalHeading = [...nav.children].find(child => child instanceof HTMLHeadingElement);
+	if (originalHeading) {
+		titleElem.replaceChildren(...originalHeading.childNodes);
+	} else {
+		titleElem.textContent = toc_default_title;
+	}
+
+	// convert the navigation list
+	const ol = [...nav.children].find(child => child instanceof HTMLOListElement)!;
+	makeUiOlFromNavOlInPlace(ol, url);
+	navElem.replaceChildren(ol);
+
+	navElem.lang = nav.lang || doc.documentElement.lang || Context.getEpubLang();
+}
+
+function makeUiOlFromNavOlInPlace(ol: HTMLOListElement, navDocUrl: URL): void {
 	for (const child of ol.children) {
 		if (child instanceof HTMLLIElement) {
-			const label = document.createElement("button");
-			label.textContent = "--";
-			label.disabled = true;
+			const elemNavBtn = document.createElement("button");
+			elemNavBtn.textContent = "--";
+			elemNavBtn.disabled = true;
 			let ol: HTMLOListElement | null = null;
 			for (const grandChild of child.children) {
 				if (grandChild instanceof HTMLSpanElement) {
-					label.replaceChildren(...grandChild.childNodes);
-					label.disabled = true;
-					label.value = "";
+					elemNavBtn.replaceChildren(...grandChild.childNodes);
+					elemNavBtn.disabled = true;
+					elemNavBtn.value = "";
 					if (grandChild.lang) {
-						label.lang = grandChild.lang;
+						elemNavBtn.lang = grandChild.lang;
 					}
 				} else if (grandChild instanceof HTMLAnchorElement) {
-					label.replaceChildren(...grandChild.childNodes);
-					label.disabled = false;
+					elemNavBtn.replaceChildren(...grandChild.childNodes);
+					elemNavBtn.disabled = false;
 					// relative path
 					let href = grandChild.getAttribute("href") ?? "";
 					let path = "";
@@ -153,19 +193,19 @@ function remakeNavPoints(ol: HTMLOListElement, navDocUrl: URL): void {
 							locationId = url.hash.slice(1); // empty if hash is empty
 						}
 					}
-					label.value = href;
-					label.dataset.path = path;
-					label.dataset.locationId = locationId;
+					elemNavBtn.value = href;
+					elemNavBtn.dataset.path = path;
+					elemNavBtn.dataset.locationId = locationId;
 					if (grandChild.lang) {
-						label.lang = grandChild.lang;
+						elemNavBtn.lang = grandChild.lang;
 					}
 				} else if (grandChild instanceof HTMLOListElement) {
 					ol = grandChild;
-					remakeNavPoints(ol, navDocUrl);
+					makeUiOlFromNavOlInPlace(ol, navDocUrl);
 				}
 			}
 			child.replaceChildren();
-			child.appendChild(label);
+			child.appendChild(elemNavBtn);
 			if (ol) {
 				child.appendChild(ol);
 			}
@@ -175,24 +215,42 @@ function remakeNavPoints(ol: HTMLOListElement, navDocUrl: URL): void {
 	}
 }
 
-// TODO: this is wrong but should be unreachable. delete when it's time.
-function createNavPointNcx(navPoint: EpubNavPoint): HTMLLIElement {
-	const elemNavPoint = document.createElement("li");
+function makeUiLiFromNcxNavPoint(navPoint: Element, ncxDocUrl: URL): HTMLLIElement {
+	const elem = document.createElement("li");
 
-	const elemNavBtn = document.createElement("button");
-	elemNavBtn.textContent = navPoint.label;
-	elemNavBtn.value = navPoint.content;
-	const [path, locationId] = navPoint.content.split("#", 2);
-	elemNavBtn.dataset.path = path;
-	elemNavBtn.dataset.locationId = locationId || "";
-	elemNavBtn.dataset.playOrder = navPoint.playOrder.toString();
-	elemNavPoint.appendChild(elemNavBtn);
-
-	if (navPoint.children.length > 0) {
-		const sub = document.createElement("ol");
-		sub.append(...navPoint.children.map(createNavPointNcx));
-		elemNavPoint.appendChild(sub);
+	let text: string | null = null;
+	let href: URL | null = null;
+	const children = [];
+	for (const child of navPoint.children) {
+		if (child.tagName == "navLabel") {
+			text = child.firstElementChild?.textContent ?? null;
+		} else if (child.tagName == "content") {
+			href = URL.parse(child.getAttribute("src")!, ncxDocUrl);
+		} else if (child.tagName == "navPoint") {
+			children.push(child);
+		}
 	}
 
-	return elemNavPoint;
+	const elemNavBtn = document.createElement("button");
+	elemNavBtn.textContent = text || "--";
+	if (href) {
+		elemNavBtn.disabled = false;
+		elemNavBtn.value = href.toString();
+		elemNavBtn.dataset.path = href.pathname;
+		elemNavBtn.dataset.locationId = href.hash.slice(1);
+	} else {
+		elemNavBtn.disabled = true;
+		elemNavBtn.value = "";
+	}
+	elem.appendChild(elemNavBtn);
+
+	if (children.length > 0) {
+		const sub = document.createElement("ol");
+		for (const childElem of children) {
+			sub.appendChild(makeUiLiFromNcxNavPoint(childElem, ncxDocUrl));
+		}
+		elem.appendChild(sub);
+	}
+
+	return elem;
 }
