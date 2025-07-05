@@ -34,7 +34,7 @@ impl Package {
 }
 
 /// Alias for IDs
-type Id = Box<[u8]>;
+pub type Id = Box<[u8]>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PropertiesValue(String);
@@ -63,11 +63,14 @@ pub struct MetadataRefinement {
 /// When facing EPUB2, it also draws information from XHTML1.1 `<meta>`.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct MetadataItem {
+    #[serde(skip_serializing)]
     pub id: Option<Id>,
     pub property: String,
     pub value: String,
     pub lang: Option<String>,
     pub refined: Vec<MetadataRefinement>,
+    #[serde(skip_serializing)]
+    pub legacy: bool,
 }
 
 /// `<package><metadata>`
@@ -263,6 +266,7 @@ impl<R: Read> PackageParser<R> {
                         value: String::new(),
                         lang,
                         refined,
+                        legacy: false,
                     });
                     last_value_pending_state = Some(LastValue::Metadata);
                 }
@@ -298,6 +302,7 @@ impl<R: Read> PackageParser<R> {
                                 value: String::new(), // tbd
                                 lang,
                                 refined: vec![],
+                                legacy: false,
                             });
                             last_value_pending_state = Some(LastValue::Metadata);
                         }
@@ -316,6 +321,7 @@ impl<R: Read> PackageParser<R> {
                             value: content,
                             lang: None,
                             refined: vec![],
+                            legacy: true,
                         });
                     }
                 }
@@ -540,7 +546,7 @@ mod tests {
             assert_eq!(None, spine.toc);
             assert_eq!(
                 vec![Itemref {
-                    idref: b"43915".as_slice().into(),
+                    idref: b"r4915".as_slice().into(),
                     properties: None
                 },],
                 spine.itemrefs

@@ -79,7 +79,7 @@ impl TryFrom<&AppOpenedEpub> for AboutPub {
             }
         };
 
-        Ok(AboutPub {
+        let about = AboutPub {
             file_path: path.clone(),
             file_size: file_metadata.len(),
             file_created: file_metadata.created().map(as_ms).unwrap_or_default(),
@@ -90,7 +90,13 @@ impl TryFrom<&AppOpenedEpub> for AboutPub {
             pub_toc_url,
             pub_toc_is_legacy,
             pub_landing_page: pb.navigate_to_start().clone(),
-        })
+        };
+        log::debug!(
+            "AboutPub: {}",
+            serde_json::to_string_pretty(&about).unwrap()
+        );
+
+        Ok(about)
     }
 }
 

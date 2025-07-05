@@ -154,23 +154,14 @@ impl Epub {
         let mut resource_indexes = HashMap::new();
         let mut spine = Vec::new();
         for itemref in &package.spine.itemrefs {
+            let item_id: &package::Id = &itemref.idref;
             let item = package
                 .manifest
-                .remove(&itemref.idref)
+                .remove(item_id)
                 .ok_or(OneOf::new(EpubError::from(PackageErr::Spine)))?;
             let key = package_doc_url
                 .join(&item.href)
                 .map_err(|_| OneOf::new(EpubError::InvalidHref))?;
-
-            if legacy_toc_id.is_some_and(|id| *id == itemref.idref) {
-                legacy_toc = Some(key.clone());
-            }
-            if legacy_cover_id
-                .as_ref()
-                .is_some_and(|id| *id == itemref.idref)
-            {
-                legacy_cover = Some(key.clone());
-            }
 
             let ri: ResourceIndex = resources.len();
             spine.push(key.clone());
@@ -180,10 +171,18 @@ impl Epub {
             });
             resource_indexes.insert(key, ri);
         }
-        for item in package.manifest.into_values() {
+        for (item_id, item) in package.manifest.into_iter() {
             let key = package_doc_url
                 .join(&item.href)
                 .map_err(|_| OneOf::new(EpubError::InvalidHref))?;
+
+            if legacy_toc_id.is_some_and(|id| *id == item_id) {
+                legacy_toc = Some(key.clone());
+            }
+            if legacy_cover_id.as_ref().is_some_and(|id| *id == item_id) {
+                legacy_cover = Some(key.clone());
+            }
+
             let ri = resources.len();
             resources.push(ResourceInfo {
                 media_type: item.media_type,
@@ -372,7 +371,7 @@ mod tests {
         assert_eq!(expected, package_doc_uri);
     }
 
-    const EPUB3_PATH: &str = "src/testing/descartes.epub";
+    const EPUB3_PATH: &str = "src/epub/testing/descartes.epub";
 
     #[test]
     fn test_epub3_opens() {
@@ -406,22 +405,44 @@ mod tests {
     }
 
     #[test]
-    fn test_epub3_spine() {
-        // let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB3_PATH);
-        // let file = std::fs::File::open(path).expect("Failed to open file");
-        // let (epub, _) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
+    fn test_epub3_spine_soundness() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB3_PATH);
+        let file = std::fs::File::open(path).expect("Failed to open file");
+        let (epub, _) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
 
-        // let mut page = Some(epub.navigate_to_start());
+        epub.spine().iter().for_each(|u| {
+            let i = epub.resource_indexes.get(u).unwrap();
+            assert_eq!(epub.spine[*i], *u);
+        });
+    }
 
-        // // forward
-        // for _ in 0..99 {
-        //     match page {
-        //         Some(p) => page = epub.navigate_from(&p.url, true).unwrap(),
-        //         None => break,
-        //     }
-        // }
-        // // there's a problem if still navigating after 99 iterations.
-        // assert!(page.is_none());
+    const EPUB2_PATH: &str = "src/epub/testing/bell.epub";
+
+    #[test]
+    fn test_epub2_opens() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB2_PATH);
+        let file = std::fs::File::open(path).expect("Failed to open file");
+        let (epub, _) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
+
+        assert_eq!(package::Version::Epub2_0, epub.version);
+
+        let title_data = epub.title().expect("Failed to recognize title");
+        assert_eq!(String::from("For Whom the Bell Tolls"), title_data.value);
+    }
+
+    #[test]
+    fn test_epub2_legacy_data() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(EPUB2_PATH);
+        let file = std::fs::File::open(path).expect("Failed to open file");
+        let (epub, _) = Epub::open(BufReader::new(file)).expect("Failed to open EPUB");
+
+        let expected = url::Url::parse("epub:/cover1.jpg").unwrap();
+        let actual = epub.cover().expect("Has cover");
+        assert_eq!(expected, *actual);
+
+        let expected = url::Url::parse("epub:/toc.ncx").unwrap();
+        let actual = epub.legacy_toc().as_ref().expect("Has ncx toc");
+        assert_eq!(expected, *actual);
     }
 
     #[test]
