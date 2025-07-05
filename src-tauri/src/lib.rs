@@ -1,3 +1,4 @@
+mod alter;
 mod epub;
 mod errors;
 mod menus;
@@ -17,6 +18,7 @@ use tauri_plugin_store::{StoreExt, resolve_store_path};
 use twox_hash::XxHash64;
 use url::Url;
 
+use alter::{alter_css, alter_xhtml};
 use epub::Epub;
 use errors::AnyErr;
 
@@ -115,48 +117,7 @@ pub const MIMETYPE_XHTML: &str = "application/xhtml+xml";
 pub const MIMETYPE_SVG: &str = "image/svg+xml";
 pub const MIMETYPE_CSS: &str = "text/css";
 
-// Helper functions, that tauri::commands depends on.
-// Don't lock state within. Receive state as argument.
-
-impl EpubArchive {
-    fn read_to_string(&mut self, u: &url::Url) -> Result<String, AnyErr> {
-        let mut reader = self.get_reader(u)?;
-        let mut out = String::new();
-        _ = reader.read_to_string(&mut out)?;
-        Ok(out)
-    }
-
-    fn read_to_end(&mut self, u: &url::Url) -> Result<Vec<u8>, AnyErr> {
-        let mut reader = self.get_reader(u)?;
-        let mut out = Vec::new();
-        _ = reader.read_to_end(&mut out)?;
-        Ok(out)
-    }
-}
-
 struct BytesAndMediaType(Vec<u8>, String);
-
-/// If `doc_url` points to a content document, return its content in bytes and media type.
-fn pub_get_content_and_media_type(
-    opened: &mut AppOpenedEpub,
-    doc_url: &Url,
-) -> Result<BytesAndMediaType, AnyErr> {
-    // get info
-    let media_type = {
-        let info = opened.pb.resource(doc_url)?;
-        info.media_type.clone()
-    };
-
-    // must be content doc
-    if media_type != MIMETYPE_SVG && media_type != MIMETYPE_XHTML {
-        return Err(AnyErr::EpubContent);
-    }
-
-    // TODO: alteration
-
-    let content = opened.archive.read_to_end(doc_url)?;
-    Ok(BytesAndMediaType(content, media_type))
-}
 
 // /// Uses state.book. Also modifies progress store.
 // /// Save the current spine item position in state to store.
@@ -315,22 +276,6 @@ fn custom_styles_path(
     let mut path = resolve_store_path(app_handle, opened.hash)?;
     path.set_extension("json");
     Ok(path)
-}
-
-fn pub_get_resource_and_media_type(
-    opened: &mut AppOpenedEpub,
-    resource_url: &Url,
-) -> Result<BytesAndMediaType, AnyErr> {
-    // get info
-    let media_type = {
-        let info = opened.pb.resource(resource_url)?;
-        info.media_type.clone()
-    };
-
-    // TODO: alteration
-
-    let content = opened.archive.read_to_end(resource_url)?;
-    Ok(BytesAndMediaType(content, media_type.clone()))
 }
 
 // fn get_resource(state: State<AppState>, resource_url: &Url) -> Result<BytesAndMediaType, AnyErr> {
@@ -592,6 +537,64 @@ fn convert_internal_uri(uri_in_request: &http::Uri) -> Result<url::Url, url::Par
     url::Url::parse("epub:/").and_then(|u| u.join(path))
 }
 
+fn serve_epub_request_body<R: Read>(
+    mut zipfile: zip::read::ZipFile<'_, R>,
+    media_type: &str,
+    is_content_doc: bool,
+) -> Result<Vec<u8>, AnyErr> {
+    if is_content_doc {
+        if media_type == MIMETYPE_XHTML {
+            return alter_xhtml(zipfile);
+        } else if media_type == MIMETYPE_SVG {
+            // original
+        } else {
+            return Err(AnyErr::EpubContent);
+        }
+    } else if media_type == MIMETYPE_CSS {
+        return alter_css(zipfile);
+    }
+
+    let mut buf = Vec::new();
+    buf.reserve(zipfile.size() as usize);
+    zipfile.read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
+fn serve_epub_request(
+    app_handle: &AppHandle,
+    uri: &Url,
+    is_content_doc: bool,
+) -> Result<BytesAndMediaType, http::StatusCode> {
+    let state = app_handle.state::<AppState>();
+    let mut state_guard = state.lock().unwrap();
+    let opened = state_guard.opened_pub.as_mut().unwrap();
+
+    let media_type = {
+        let info = opened
+            .pb
+            .resource(uri)
+            .map_err(|_| http::StatusCode::NOT_FOUND)?;
+        info.media_type.clone()
+    };
+
+    let reader = opened
+        .archive
+        .get_reader(uri)
+        .map_err(|e| match e.narrow() {
+            Ok(epub::UrlNotFoundErr) => http::StatusCode::NOT_FOUND,
+            _ => http::StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+
+    let body =
+        serve_epub_request_body(reader, &media_type, is_content_doc).map_err(|e| match e {
+            AnyErr::EpubUrlNotFound(_) => http::StatusCode::NOT_FOUND,
+            AnyErr::EpubContent => http::StatusCode::BAD_REQUEST,
+            _ => http::StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+
+    Ok(BytesAndMediaType(body, media_type))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(filepath: Option<PathBuf>) {
     tauri::Builder::default()
@@ -625,23 +628,21 @@ pub fn run(filepath: Option<PathBuf>) {
 
             log::debug!("handling request {}", uri);
 
-            let app = ctx.app_handle();
-            let state = app.state::<AppState>();
-            let mut state_guard = state.lock().unwrap();
-            match pub_get_resource_and_media_type(state_guard.opened_pub.as_mut().unwrap(), &uri) {
-                Ok(BytesAndMediaType(content, mime)) => http::Response::builder()
+            let is_content_doc = request
+                .headers()
+                .get("Ogier-Epub-Content-Document")
+                .is_some_and(|v| !v.is_empty());
+
+            match serve_epub_request(ctx.app_handle(), &uri, is_content_doc) {
+                Ok(BytesAndMediaType(body, mime)) => http::Response::builder()
                     .status(http::StatusCode::OK)
                     .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                     .header(http::header::CONTENT_TYPE, mime)
-                    .body(content)
+                    .body(body)
                     .unwrap(),
-                Err(AnyErr::EpubUrlNotFound(_)) => http::Response::builder()
-                    .status(http::StatusCode::NOT_FOUND)
-                    .body(Vec::new())
-                    .unwrap(),
-                Err(e) => http::Response::builder()
-                    .status(http::StatusCode::BAD_REQUEST)
-                    .body(e.to_string().as_bytes().to_vec())
+                Err(code) => http::Response::builder()
+                    .status(code)
+                    .body(Vec::default())
                     .unwrap(),
             }
         })

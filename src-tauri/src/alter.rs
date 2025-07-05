@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, BufRead, BufReader, Read};
 
 use arrayvec::ArrayString;
 use cssparser::{ParseError, Parser, ParserInput, ToCss, Token};
@@ -6,6 +6,8 @@ use quick_xml::{
     Reader, Writer,
     events::{BytesText, Event, attributes::Attribute},
 };
+
+use crate::errors::AnyErr;
 
 fn abs_length_in_rem(value: f32, unit: &str) -> Option<f32> {
     const BASE_FONT_SIZE: f32 = 16.0;
@@ -153,28 +155,33 @@ fn font_custom_property_ref(name: &str) -> String {
     out
 }
 
-pub fn alter_css(css: &str) -> Option<String> {
+fn alter_css_str(css: &str) -> Result<String, AnyErr> {
     let mut output = String::new();
 
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
 
-    if let Err(_) = transform_css(&mut parser, &mut output, false, false) {
-        return None;
-    }
+    transform_css(&mut parser, &mut output, false, false).map_err(|_| AnyErr::EpubContent)?;
 
-    Some(output)
+    Ok(output)
 }
 
-fn transform_xhtml(xhtml: &str) -> Result<Vec<u8>, quick_xml::Error> {
-    let mut reader = Reader::from_str(xhtml);
+pub fn alter_css<R: Read>(mut reader: R) -> Result<Vec<u8>, AnyErr> {
+    let mut css = String::new();
+    reader.read_to_string(&mut css)?;
+    alter_css_str(&css).map(Vec::from)
+}
+
+fn transform_xhtml<R: BufRead>(reader: R) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut reader = Reader::from_reader(reader);
     reader.config_mut().trim_text(true);
 
+    let mut buffer = Vec::new();
     let mut writer = Writer::new(io::Cursor::new(Vec::new()));
 
     let mut is_css = false;
     loop {
-        let evt = reader.read_event()?;
+        let evt = reader.read_event_into(&mut buffer)?;
         let mut replace = None;
         match evt {
             // done
@@ -184,11 +191,9 @@ fn transform_xhtml(xhtml: &str) -> Result<Vec<u8>, quick_xml::Error> {
                 is_css = true;
             }
             Event::Text(ref e) if is_css => {
-                replace = e
-                    .unescape()
-                    .map_or(None, |css| Some(css))
-                    .and_then(|css| alter_css(&css))
-                    .map(|css| Event::Text(BytesText::from_escaped(css)));
+                let css = e.unescape()?;
+                let css = alter_css_str(&css).unwrap_or_else(|_| String::from(css));
+                replace = Some(Event::Text(BytesText::from_escaped(css)));
             }
             Event::End(_) if is_css => {
                 is_css = false;
@@ -196,21 +201,27 @@ fn transform_xhtml(xhtml: &str) -> Result<Vec<u8>, quick_xml::Error> {
 
             Event::Start(ref e) => {
                 if let Ok(Some(attr)) = e.try_get_attribute("style") {
-                    let css = String::from_utf8_lossy(&attr.value);
-                    replace = alter_css(&css).map(|css| {
-                        let mut start = e.to_owned();
-                        start.clear_attributes();
-                        e.attributes().for_each(|attr| {
-                            if let Ok(attr) = attr {
-                                if attr.key.0.eq_ignore_ascii_case(b"style") {
-                                    start.push_attribute(Attribute::from(("style", css.as_str())));
-                                } else {
-                                    start.push_attribute(attr);
+                    let css = attr.decode_and_unescape_value(reader.decoder())?;
+                    match alter_css_str(&css) {
+                        Ok(css) => {
+                            let mut start = e.to_owned();
+                            start.clear_attributes();
+                            e.attributes().for_each(|attr| {
+                                if let Ok(attr) = attr {
+                                    if attr.key.0.eq_ignore_ascii_case(b"style") {
+                                        start.push_attribute(Attribute::from((
+                                            "style",
+                                            css.as_str(),
+                                        )));
+                                    } else {
+                                        start.push_attribute(attr);
+                                    }
                                 }
-                            }
-                        });
-                        Event::Start(start)
-                    });
+                            });
+                            replace = Some(Event::Start(start));
+                        }
+                        Err(_) => {}
+                    }
                 }
             }
             _ => {}
@@ -219,30 +230,27 @@ fn transform_xhtml(xhtml: &str) -> Result<Vec<u8>, quick_xml::Error> {
     }
 }
 
-pub fn alter_xhtml(xhtml: &str) -> Option<String> {
-    let Ok(output) = transform_xhtml(xhtml) else {
-        return None;
-    };
-    String::from_utf8(output).map_or(None, |s| Some(s))
+pub fn alter_xhtml<R: Read>(reader: R) -> Result<Vec<u8>, AnyErr> {
+    transform_xhtml(BufReader::new(reader)).map_err(|_| AnyErr::EpubContent)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{alter_css, alter_xhtml};
+    use crate::{alter::alter_css_str, alter_xhtml};
 
     #[test]
     fn test_alter_css_font_size() {
         let input =
             "body { font-size: 16px; margin: 32px; } p { padding: 8px; } a { font-size: medium; }";
         let expected = "body { font-size: 1.00rem; margin: 2.00rem; } p { padding: 0.50rem; } a { font-size: 1.00rem; }";
-        assert_eq!(alter_css(input).unwrap(), expected);
+        assert_eq!(expected, alter_css_str(input).unwrap());
     }
 
     #[test]
     fn test_alter_css_nesting() {
         let input = "body { color: green; p { color: red; a { color: blue } } }";
         let expected = "body { color: green; p { color: red; a { color: blue } } }";
-        assert_eq!(alter_css(input).unwrap(), expected);
+        assert_eq!(expected, alter_css_str(input).unwrap());
     }
 
     #[test]
@@ -257,7 +265,7 @@ mod tests {
                 var(--og-font-7365726966), serif;
         }
         head {}"#;
-        assert_eq!(alter_css(input).unwrap(), expected);
+        assert_eq!(expected, alter_css_str(input).unwrap());
     }
 
     #[test]
@@ -274,13 +282,15 @@ mod tests {
                     color: blue;
                     line-height: calc(var(--og-line-height-scale) * 1.00);
                 }</style></head></html>"#;
-        assert_eq!(alter_xhtml(input).unwrap(), expected);
+        let reader = input.as_bytes();
+        assert_eq!(Vec::from(expected), alter_xhtml(reader).unwrap());
     }
 
     #[test]
     fn test_alter_xhtml_style_inline() {
         let input = "<html><body style=\"line-height:1\"></body></html>";
         let expected = "<html><body style=\"line-height:calc(var(--og-line-height-scale) * 1.00)\"></body></html>";
-        assert_eq!(alter_xhtml(input).unwrap(), expected);
+        let reader = input.as_bytes();
+        assert_eq!(Vec::from(expected), alter_xhtml(reader).unwrap());
     }
 }

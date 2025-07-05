@@ -200,18 +200,16 @@ export function setElementUrl(
 	}
 }
 
-export function fetchXml(url: URL, mimeTypes?: string[]): Promise<Document> {
+export function fetchXml(url: URL, isContentDoc: boolean): Promise<Document> {
 	const tauriUrl = toResourceUri(url);
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
 		xhr.open("GET", tauriUrl);
-		if (mimeTypes) {
-			for (const mt of mimeTypes) {
-				xhr.setRequestHeader("Accept", mt);
-			}
+		if (isContentDoc) {
+			xhr.setRequestHeader("Accept", "application/xhtml+xml");
+			xhr.setRequestHeader("Accept", "image/svg+xml");
+			xhr.setRequestHeader("Ogier-Epub-Content-Document", "1");
 		}
-		xhr.setRequestHeader("Accept", "application/xhtml+xml");
-		xhr.setRequestHeader("Accept", "image/svg+xml");
 		xhr.onerror = reject;
 		xhr.onload = () => {
 			// TODO: confirm svg works

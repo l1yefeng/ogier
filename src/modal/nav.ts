@@ -32,7 +32,7 @@ export class NavModal extends BaseModal {
 		if (!url) {
 			throw new Error("No TOC");
 		}
-		const doc = await fetchXml(url);
+		const doc = await fetchXml(url, false);
 
 		if (isLegacy) {
 			makeUiFromNcx(doc, url, this.#nav, this.#title);

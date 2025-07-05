@@ -113,7 +113,7 @@ async function renderBookPage(url: URL, percentage: number | null): Promise<void
 	readerShadowRoot!.replaceChildren();
 
 	console.debug("parsing doc");
-	const doc = await fetchXml(url);
+	const doc = await fetchXml(url, true);
 	Context.spineItemLang = doc.documentElement.lang;
 	elemReaderHost!.lang = Context.spineItemLang || Context.getEpubLang();
 	const pageBody = doc.body;
