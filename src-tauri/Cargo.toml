@@ -15,7 +15,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 arrayvec = "0.7.6"
-base64 = "0.22.1"
 cssparser = "0.35.0"
 log = "0.4"
 quick-xml = { version = "0.37.5", features = ["encoding"] }
