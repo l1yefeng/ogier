@@ -11,7 +11,7 @@ import {
 import {
 	AboutPub,
 	anchoredSamePageLocation,
-	CustomStyles,
+	FilewiseStyles,
 	fetchXml,
 	FontPrefer,
 	getCurrentPosition,
@@ -139,16 +139,16 @@ async function renderBookPage(
 	console.debug("CALL: loadPageStyles (skipped)");
 	const stylesheetLinks = await loadPageStyles(doc.head);
 
-	let customStyles: Partial<CustomStyles>;
+	let filewiseStyles: Partial<FilewiseStyles>;
 	try {
-		customStyles = (await rs.getCustomStyles()) || {};
+		filewiseStyles = (await rs.getFilewiseStyles()) || {};
 	} catch (err) {
-		console.error("Error loading saved custom styles:", err);
-		customStyles = {};
+		console.error("Error loading saved filewise styles:", err);
+		filewiseStyles = {};
 	}
-	const localStylesCommit = (styles: CustomStyles) => (styler!.filewiseStyles = styles);
-	commitCustomStylesFromSaved(customStyles, localStylesCommit);
-	activateCustomizationInput(localStylesCommit, rs.setCustomStyles);
+	const localStylesCommit = (styles: FilewiseStyles) => (styler!.filewiseStyles = styles);
+	commitCustomStylesFromSaved(filewiseStyles, localStylesCommit);
+	activateCustomizationInput(localStylesCommit, rs.setFilewiseStyles);
 
 	// insert the body
 	readerShadowRoot!.append(...stylesheetLinks, pageBody);

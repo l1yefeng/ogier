@@ -10,34 +10,34 @@
  *  "committed": applied to the reader UI.
  */
 
-import { CustomStyleKey, CustomStyles } from "./base";
+import { FilewiseStylesKey, FilewiseStyles } from "./base";
 
-let elemCustomizationInput: Record<CustomStyleKey, HTMLInputElement> | null = null;
+let elemCustomizationInput: Record<FilewiseStylesKey, HTMLInputElement> | null = null;
 
 export function loadCustomizationContent(): void {
-	const elem = (key: CustomStyleKey) =>
+	const elem = (key: FilewiseStylesKey) =>
 		document.getElementById(`og-customization-${key}`) as HTMLInputElement;
 	elemCustomizationInput = {
-		[CustomStyleKey.BaseFontSize]: elem(CustomStyleKey.BaseFontSize),
-		[CustomStyleKey.LineHeightScale]: elem(CustomStyleKey.LineHeightScale),
-		[CustomStyleKey.InlineMargin]: elem(CustomStyleKey.InlineMargin),
+		[FilewiseStylesKey.BaseFontSize]: elem(FilewiseStylesKey.BaseFontSize),
+		[FilewiseStylesKey.LineHeightScale]: elem(FilewiseStylesKey.LineHeightScale),
+		[FilewiseStylesKey.InlineMargin]: elem(FilewiseStylesKey.InlineMargin),
 	};
 }
 
-function stagedCustomStyles(): CustomStyles {
-	const value = (key: CustomStyleKey) => elemCustomizationInput![key].valueAsNumber;
+function stagedCustomStyles(): FilewiseStyles {
+	const value = (key: FilewiseStylesKey) => elemCustomizationInput![key].valueAsNumber;
 	return {
-		[CustomStyleKey.BaseFontSize]: value(CustomStyleKey.BaseFontSize),
-		[CustomStyleKey.LineHeightScale]: value(CustomStyleKey.LineHeightScale),
-		[CustomStyleKey.InlineMargin]: value(CustomStyleKey.InlineMargin),
+		[FilewiseStylesKey.BaseFontSize]: value(FilewiseStylesKey.BaseFontSize),
+		[FilewiseStylesKey.LineHeightScale]: value(FilewiseStylesKey.LineHeightScale),
+		[FilewiseStylesKey.InlineMargin]: value(FilewiseStylesKey.InlineMargin),
 	};
 }
 
 export function commitCustomStylesFromSaved(
-	saved: Partial<CustomStyles>,
-	commit: (styles: CustomStyles) => void,
+	saved: Partial<FilewiseStyles>,
+	commit: (styles: FilewiseStyles) => void,
 ): void {
-	let key: CustomStyleKey;
+	let key: FilewiseStylesKey;
 	for (key in elemCustomizationInput!) {
 		const value = saved[key];
 		if (value) {
@@ -49,8 +49,8 @@ export function commitCustomStylesFromSaved(
 }
 
 export function activateCustomizationInput(
-	commit: (styles: CustomStyles) => void,
-	save: (styles: CustomStyles) => void,
+	commit: (styles: FilewiseStyles) => void,
+	save: (styles: FilewiseStyles) => void,
 ): void {
 	const listener = () => {
 		const styles = stagedCustomStyles();

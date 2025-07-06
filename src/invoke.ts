@@ -7,12 +7,12 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import { AboutPub, AboutPubJson, CustomStyles, aboutPubFromJson } from "./base";
+import { AboutPub, AboutPubJson, FilewiseStyles, aboutPubFromJson } from "./base";
 
-export function getCustomStyles(): Promise<Partial<CustomStyles> | null> {
-	return invoke<string>("get_custom_stylesheet").then(savedSettings => {
+export function getFilewiseStyles(): Promise<Partial<FilewiseStyles> | null> {
+	return invoke<string>("get_filewise_styles").then(savedSettings => {
 		if (savedSettings) {
-			const styles: CustomStyles = JSON.parse(savedSettings);
+			const styles: FilewiseStyles = JSON.parse(savedSettings);
 			return styles;
 		} else {
 			return null;
@@ -20,9 +20,9 @@ export function getCustomStyles(): Promise<Partial<CustomStyles> | null> {
 	});
 }
 
-export function setCustomStyles(styles: CustomStyles): Promise<void> {
+export function setFilewiseStyles(styles: FilewiseStyles): Promise<void> {
 	const args = { content: JSON.stringify(styles, undefined, 2) };
-	return invoke("set_custom_stylesheet", args);
+	return invoke("set_filewise_styles", args);
 }
 
 export function openEpub(path: string): Promise<AboutPub> {

@@ -1,4 +1,4 @@
-import { clamp, CustomStyleKey, CustomStyles, FontPrefer } from "./base";
+import { clamp, FilewiseStylesKey, FilewiseStyles, FontPrefer } from "./base";
 import { Context } from "./context";
 
 export class Styler {
@@ -8,7 +8,7 @@ export class Styler {
 	#filewiseStylesCss: CSSStyleSheet;
 	#styleElemsCss: CSSStyleSheet;
 
-	#filewiseStyles: CustomStyles | null = null;
+	#filewiseStyles: FilewiseStyles | null = null;
 	#utf8Encoder = new TextEncoder();
 
 	constructor(readerRoot: ShadowRoot) {
@@ -80,7 +80,7 @@ export class Styler {
 		this.#styleElemsCss.replace(css);
 	}
 
-	set filewiseStyles(value: CustomStyles) {
+	set filewiseStyles(value: FilewiseStyles) {
 		this.#filewiseStyles = value;
 		this.#setFilewiseStyleCss();
 	}
@@ -89,9 +89,9 @@ export class Styler {
 		let hostStyle = "";
 		if (this.#filewiseStyles) {
 			const styles = this.#filewiseStyles;
-			const baseFontSize = clamp(styles[CustomStyleKey.BaseFontSize], 8, 72);
-			const lineHeightScale = clamp(styles[CustomStyleKey.LineHeightScale], 2, 60) / 10;
-			const inlineMargin = clamp(styles[CustomStyleKey.InlineMargin], 0, 45);
+			const baseFontSize = clamp(styles[FilewiseStylesKey.BaseFontSize], 8, 72);
+			const lineHeightScale = clamp(styles[FilewiseStylesKey.LineHeightScale], 2, 60) / 10;
+			const inlineMargin = clamp(styles[FilewiseStylesKey.InlineMargin], 0, 45);
 
 			const baseFontSizeCss = baseFontSize.toFixed(2) + "px";
 			const lineHeightScaleCss = lineHeightScale.toFixed(3);

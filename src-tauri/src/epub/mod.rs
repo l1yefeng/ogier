@@ -202,8 +202,17 @@ impl Epub {
         Ok((epub, archive))
     }
 
-    pub fn navigate_to_start(&self) -> &url::Url {
-        // TODO proper landing page
+    /// The page to show if the EPUB is opened the first time.
+    ///
+    /// The meaning is not absolute. Currently this implements the first page in spine.
+    ///
+    /// For future reference: EPUB specs support "start of content"
+    /// - EPUB3 (https://www.w3.org/TR/epub-33/#sec-nav-landmarks):
+    ///   `nav[type=landmarks]` - `a[type=bodymatter]`
+    /// - EPUB2 (https://idpf.org/epub/20/spec/OPF_2.0.1_draft.htm#Section2.6):
+    ///   `guide` - `reference[type=text]`
+    /// However, opening the first page in spine feels slightly better than the first "real chapter".
+    pub fn first_page_to_open(&self) -> &url::Url {
         &self.spine[0]
     }
 

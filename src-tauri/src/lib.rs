@@ -89,7 +89,7 @@ impl TryFrom<&AppOpenedEpub> for AboutPub {
             pub_cover_url: pb.cover().cloned(),
             pub_toc_url,
             pub_toc_is_legacy,
-            pub_landing_page: pb.navigate_to_start().clone(),
+            pub_landing_page: pb.first_page_to_open().clone(),
         };
         log::debug!(
             "AboutPub: {}",
@@ -116,6 +116,29 @@ pub const MIMETYPE_SVG: &str = "image/svg+xml";
 pub const MIMETYPE_CSS: &str = "text/css";
 
 struct BytesAndMediaType(Vec<u8>, String);
+
+/// The same file produces the same hash.
+fn compute_file_hash(filepath: &PathBuf) -> Result<EpubHash, IoError> {
+    let mut hasher = XxHash64::with_seed(0);
+
+    let file = File::open(filepath)?;
+    let mut reader = BufReader::new(file);
+
+    let mut buffer = [0u8; 8 * 1024];
+    let mut remains = 1 << 20;
+    while remains > 0 {
+        let to_read = remains.min(buffer.len());
+        let read = reader.read(&mut buffer[..to_read])?;
+        if read == 0 {
+            break;
+        }
+        hasher.write(&buffer[..read]);
+        remains -= read;
+    }
+
+    let hash = hasher.finish();
+    Ok(EpubHash::from(&format!("{hash:016x}")).unwrap())
+}
 
 /// Do several things that are necessary when a book just opened.
 fn post_book_open(window: &Window, state: &mut MutexGuard<'_, AppData>) -> Result<bool, AnyErr> {
@@ -153,7 +176,7 @@ fn book_open(state: &mut MutexGuard<'_, AppData>, path: &PathBuf) -> Result<(), 
     let file = File::open(path)?;
     let (pb, archive) = Epub::open(BufReader::new(file))?;
 
-    let hash = compute_book_hash(&path)?;
+    let hash = compute_file_hash(&path)?;
     state.opened_pub = Some(AppOpenedEpub {
         path: path.clone(),
         pb,
@@ -166,30 +189,7 @@ fn book_open(state: &mut MutexGuard<'_, AppData>, path: &PathBuf) -> Result<(), 
     Ok(())
 }
 
-// TODO: move out of lib.rs
-fn compute_book_hash(filepath: &PathBuf) -> Result<EpubHash, IoError> {
-    let mut hasher = XxHash64::with_seed(0);
-
-    let file = File::open(filepath)?;
-    let mut reader = BufReader::new(file);
-
-    let mut buffer = [0u8; 8 * 1024];
-    let mut remains = 1 << 20;
-    while remains > 0 {
-        let to_read = remains.min(buffer.len());
-        let read = reader.read(&mut buffer[..to_read])?;
-        if read == 0 {
-            break;
-        }
-        hasher.write(&buffer[..read]);
-        remains -= read;
-    }
-
-    let hash = hasher.finish();
-    Ok(EpubHash::from(&format!("{hash:016x}")).unwrap())
-}
-
-fn custom_styles_path(
+fn filewise_styles_path(
     app_handle: &AppHandle,
     state: &MutexGuard<'_, AppData>,
 ) -> Result<PathBuf, AnyErr> {
@@ -199,25 +199,24 @@ fn custom_styles_path(
     Ok(path)
 }
 
-// TODO: rename (see README)
 #[tauri::command]
-fn get_custom_stylesheet(app_handle: AppHandle, state: State<AppState>) -> Result<String, AnyErr> {
+fn get_filewise_styles(app_handle: AppHandle, state: State<AppState>) -> Result<String, AnyErr> {
     let path = {
         let state_guard = state.lock().unwrap();
-        custom_styles_path(&app_handle, &state_guard)?
+        filewise_styles_path(&app_handle, &state_guard)?
     };
     Ok(std::fs::read_to_string(path).unwrap_or_default())
 }
 
 #[tauri::command]
-fn set_custom_stylesheet(
+fn set_filewise_styles(
     app_handle: AppHandle,
     state: State<AppState>,
     content: String,
 ) -> Result<(), AnyErr> {
     let path = {
         let state_guard = state.lock().unwrap();
-        custom_styles_path(&app_handle, &state_guard)?
+        filewise_styles_path(&app_handle, &state_guard)?
     };
     std::fs::write(path, content)?;
     Ok(())
@@ -311,8 +310,8 @@ fn open_epub_if_loaded(window: Window, state: State<AppState>) -> Result<Option<
     AboutPub::try_from(opened).map(Some)
 }
 
-fn convert_internal_uri(uri_in_request: &http::Uri) -> Result<url::Url, url::ParseError> {
-    // TODO see warnings of `register_uri_scheme_protocol` about cross-platform
+/// Convert the epub:// URL from `http::Uri` to `url::Url`.
+fn url_from_epub_request(uri_in_request: &http::Uri) -> Result<url::Url, url::ParseError> {
     debug_assert_eq!(uri_in_request.scheme_str(), Some("epub"));
     let path = uri_in_request.path();
     debug_assert!(!path.starts_with("/localhost"));
@@ -401,7 +400,7 @@ pub fn run(filepath: Option<PathBuf>) {
             Ok(())
         })
         .register_uri_scheme_protocol("epub", |ctx, request| {
-            let Ok(uri) = convert_internal_uri(request.uri()) else {
+            let Ok(uri) = url_from_epub_request(request.uri()) else {
                 return http::Response::builder()
                     .status(http::StatusCode::BAD_REQUEST)
                     .body(Vec::new())
@@ -429,12 +428,12 @@ pub fn run(filepath: Option<PathBuf>) {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            get_custom_stylesheet,
+            get_filewise_styles,
             get_reading_position,
             open_epub,
             open_epub_if_loaded,
             reload_book,
-            set_custom_stylesheet,
+            set_filewise_styles,
             set_reading_position,
         ])
         .run(tauri::generate_context!())

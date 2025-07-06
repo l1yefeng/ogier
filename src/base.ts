@@ -70,12 +70,12 @@ export function aboutPubFromJson(json: AboutPubJson): AboutPub {
 	};
 }
 
-export enum CustomStyleKey {
+export enum FilewiseStylesKey {
 	BaseFontSize = "base-font-size",
 	LineHeightScale = "line-height-scale",
 	InlineMargin = "inline-margin",
 }
-export type CustomStyles = Record<CustomStyleKey, number>;
+export type FilewiseStyles = Record<FilewiseStylesKey, number>;
 
 interface EpubExprBase {
 	property: string;

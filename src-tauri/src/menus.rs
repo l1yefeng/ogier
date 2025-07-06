@@ -226,7 +226,7 @@ pub mod view {
 
         pub fn handle(app: &tauri::AppHandle) {
             let state = app.state::<crate::AppState>();
-            let Ok(css_path) = crate::custom_styles_path(app, &state.lock().unwrap()) else {
+            let Ok(css_path) = crate::filewise_styles_path(app, &state.lock().unwrap()) else {
                 return;
             };
             let _ = app
