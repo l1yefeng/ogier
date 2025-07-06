@@ -21,7 +21,6 @@ Small and fast.
 
 ## TODO
 
-- Parse EPUB myself.
 - SVG content - find a test case.
 - Fetch font from archive
 - Other methods to customize reader (when UI is too narrow).
