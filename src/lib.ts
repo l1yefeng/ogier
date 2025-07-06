@@ -91,9 +91,17 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]>
 	return stylesheetLinks;
 }
 
-async function renderBookPage(url: URL, percentage: number | null): Promise<void> {
+async function renderBookPage(
+	url: URL,
+	percentage: number | null,
+	indexInSpine?: number,
+): Promise<void> {
 	console.debug("ENTER: renderBookPage");
-	Context.setReadingPositionUrl(url);
+	if (indexInSpine != undefined) {
+		Context.setReadingPositionInSpine(indexInSpine);
+	} else {
+		Context.setReadingPositionUrl(url);
+	}
 
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
@@ -373,7 +381,7 @@ function moveInSpine(forward: boolean): void {
 		return;
 	}
 	const percentage = forward ? 0.0 : 1.0;
-	renderBookPage(spine[index], percentage);
+	renderBookPage(spine[index], percentage, index);
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {
