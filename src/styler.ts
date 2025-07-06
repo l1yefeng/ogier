@@ -66,7 +66,7 @@ export class Styler {
 
 		// builtin
 		css += `
-            img { max-width: 100%; }
+      img { max-width: 100%; }
 			a { text-decoration: none; }
 			.og-attention { background-color: #fbe54e44; }
 		`;

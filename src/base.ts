@@ -87,6 +87,7 @@ export interface EpubMetadataRefinement extends EpubExprBase {
 }
 export interface EpubMetadataItem extends EpubExprBase {
 	refined: EpubMetadataRefinement[];
+	legacy: boolean;
 }
 export type EpubMetadata = EpubMetadataItem[];
 

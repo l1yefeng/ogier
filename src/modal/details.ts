@@ -73,8 +73,7 @@ function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
 	if (pp.length != 1 && pp.length != 2) {
 		return [];
 	}
-	if (pp.length == 1 && pp[0] == "cover") {
-		// TODO: better to know that it's EPUB2 XHTML1.1 <meta>
+	if (pp.length == 1 && data.legacy && pp[0] == "cover") {
 		return [];
 	}
 	let titleHtml = `<span class="og-capitalize">${pp[pp.length - 1]}</span>`;
