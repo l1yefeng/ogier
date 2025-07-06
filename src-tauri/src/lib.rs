@@ -458,17 +458,40 @@ fn set_custom_stylesheet(
     Ok(())
 }
 
-// #[tauri::command]
-// fn set_reading_position(
-//     window: Window,
-//     state: State<AppState>,
-//     position: f64,
-// ) -> Result<(), AnyErr> {
-//     let state_guard = state.lock().unwrap();
-//     let progress_store = window.store(PROGRESS_STORE)?;
-//     pub_progress_save(&state_guard, &progress_store, Some(position));
-//     Ok(())
-// }
+#[tauri::command]
+fn set_reading_position(
+    window: Window,
+    state: State<AppState>,
+    url: Url,
+    percentage: f64,
+) -> Result<(), AnyErr> {
+    let progress_store = window.store(PROGRESS_STORE)?;
+
+    let state_guard = state.lock().unwrap();
+    let hash = &state_guard.opened_pub.as_ref().unwrap().hash;
+    progress_store.set(hash.as_str(), serde_json::json!([url, percentage]));
+    Ok(())
+}
+
+#[tauri::command]
+fn get_reading_position(
+    window: Window,
+    state: State<AppState>,
+) -> Result<Option<(Url, Option<f64>)>, AnyErr> {
+    let progress_store = window.store(PROGRESS_STORE)?;
+
+    let state_guard = state.lock().unwrap();
+    let hash = &state_guard.opened_pub.as_ref().unwrap().hash;
+
+    let Some(val) = progress_store.get(hash) else {
+        return Ok(None);
+    };
+    let Ok(val) = serde_json::from_value(val) else {
+        return Ok(None);
+    };
+
+    Ok(Some(val))
+}
 
 fn open_epub_impl(
     window: Window,
@@ -648,6 +671,7 @@ pub fn run(filepath: Option<PathBuf>) {
         })
         .invoke_handler(tauri::generate_handler![
             get_custom_stylesheet,
+            get_reading_position,
             // get_details,
             // get_resource,
             // get_toc,
@@ -658,7 +682,7 @@ pub fn run(filepath: Option<PathBuf>) {
             open_epub,
             reload_book,
             set_custom_stylesheet,
-            // set_reading_position,
+            set_reading_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

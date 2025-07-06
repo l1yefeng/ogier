@@ -3,45 +3,11 @@
  * `invoke` from Tauri API should not be used anywhere outside this file.
  *
  * TODO: include listeners.
- *
- * TODO: lots of renaming (but, rust first).
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { CustomStyles, AboutPub, AboutPubJson, aboutPubFromJson } from "./base";
 
-// TODO: path is URL
-// export function getResource(path: URL): Promise<string> {
-// 	const args = { path: path.toString() };
-// 	return invoke("get_resource", args);
-// }
-
-// export function getDetails(): Promise<EpubDetails> {
-// 	return invoke("get_details");
-// }
-
-// export function getToc(): Promise<EpubToc> {
-// 	return invoke<Record<string, Record<string, unknown>>>("get_toc").then(result => {
-// 		let toc: EpubToc;
-// 		if (result["Nav"]) {
-// 			const parser = new DOMParser();
-// 			const { xhtml, path } = result["Nav"];
-// 			const navDoc = parser.parseFromString(xhtml as string, "application/xhtml+xml");
-// 			const lang = navDoc.documentElement.lang;
-// 			const nav = navDoc.querySelector<HTMLElement>("nav:has(>ol)");
-// 			if (!nav) {
-// 				throw new Error("TOC nav not found.");
-// 			}
-// 			toc = { kind: "nav", nav, path: new URL(path as string), lang };
-// 		} else if (result["Ncx"]) {
-// 			const { root } = result["Ncx"];
-// 			toc = { kind: "ncx", root: root as EpubNavPoint, lang: "" };
-// 		} else {
-// 			throw new Error("Not Reached");
-// 		}
-// 		return toc;
-// 	});
-// }
+import { AboutPub, AboutPubJson, CustomStyles, aboutPubFromJson } from "./base";
 
 export function getCustomStyles(): Promise<Partial<CustomStyles> | null> {
 	return invoke<string>("get_custom_stylesheet").then(savedSettings => {
@@ -70,24 +36,18 @@ export function openEpubIfLoaded(): Promise<AboutPub | null> {
 	);
 }
 
-// // TODO: Rename the API
-// export function moveInSpine(next: boolean) {
-// 	const args = { next };
-// 	return invoke<SpineItemData | null>("navigate_adjacent", args).then(result =>
-// 		result ? jsonToSpineItemData(result) : null,
-// 	);
-// }
-
-// export function moveToInSpine(url: URL) {
-// 	const args = { path: url.toString() };
-// 	return invoke<SpineItemData>("navigate_to", args).then(jsonToSpineItemData);
-// }
-
 export function reloadBook(): Promise<AboutPub> {
 	return invoke<AboutPubJson>("reload_book").then(aboutPubFromJson);
 }
 
-// export function setReadingPosition(position: number): Promise<void> {
-// 	const args = { position };
-// 	return invoke("set_reading_position", args);
-// }
+export function setReadingPosition(url: URL, percentage: number): Promise<void> {
+	const args = { url, percentage };
+	return invoke<void>("set_reading_position", args);
+}
+export function getReadingPosition(): Promise<[URL, number | null] | null> {
+	return invoke<[string, number | null] | null>("get_reading_position").then(res => {
+		if (res == null) return null;
+		const [url, percentage] = res;
+		return [URL.parse(url)!, percentage];
+	});
+}

@@ -1,4 +1,5 @@
 import { Store } from "@tauri-apps/plugin-store";
+
 import { AboutPub } from "./base";
 
 export class Context {
@@ -9,7 +10,6 @@ export class Context {
 
 	private static readingPositionUrl: URL | null = null;
 	private static readingPositionInSpine: number | null = null;
-	static readingPositionPercentage = 0.0;
 
 	private static epubLang: string | null = null;
 	static spineItemLang = "";

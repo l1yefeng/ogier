@@ -194,7 +194,10 @@ async function renderBookPage(url: URL, percentage: number | null): Promise<void
 	saveReadingProgressTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();
 		const bodyRect = pageBody.getBoundingClientRect();
-		Context.readingPositionPercentage = getCurrentPosition(hostRect, bodyRect);
+		rs.setReadingPosition(
+			Context.getReadingPositionUrl(),
+			getCurrentPosition(hostRect, bodyRect),
+		);
 	});
 
 	markSessionInProgress();
@@ -323,35 +326,33 @@ function handleClickInReader(event: PointerEvent): void {
 	}
 }
 
-async function initDetails(): Promise<void> {
+async function initDetailsAndTocModals(): Promise<void> {
 	NavModal.get().onContextLangChange();
-	const modal = DetailsModal.get();
-	modal.init();
+	const webWindow = getCurrentWebviewWindow();
 
-	getCurrentWebviewWindow().listen("menu/f_d", () => modal.show());
-}
+	const detailsModal = DetailsModal.get();
+	detailsModal.init();
 
-async function initToc(): Promise<void> {
-	const modal = NavModal.get();
+	webWindow.listen("menu/f_d", () => detailsModal.show());
+
+	const navModal = NavModal.get();
 	try {
-		await modal.init();
+		await navModal.init();
 	} catch (err) {
 		console.error("Error loading TOC:", err);
 		elemTocButton!.disabled = true;
 		elemTocButton!.title = toc_unavailable_message;
 		return;
 	}
-	modal.setupTocGoTo(navigateTo);
+	navModal.setupTocGoTo(navigateTo);
 
-	getCurrentWebviewWindow().listen("menu/f_n", () => modal.show());
+	webWindow.listen("menu/f_n", () => navModal.show());
 }
 
 export async function initReaderFrame(about: AboutPub): Promise<void> {
 	Context.setOpenedEpub(about);
 
-	// TODO: merge to one rs call
-	initToc();
-	initDetails();
+	initDetailsAndTocModals(); // don't wait
 
 	// show reader
 	elemFrame!.style.display = ""; // use display value in css
@@ -370,9 +371,10 @@ export async function initReaderFrame(about: AboutPub): Promise<void> {
 		styler!.loadAppPrefs();
 	});
 
-	// TODO: progress
-	const url = about.pubLandingPage;
-	renderBookPage(url, null);
+	// retrieve reading position
+	const position = await rs.getReadingPosition();
+	const [url, percentage] = position == null ? [about.pubLandingPage, null] : position;
+	await renderBookPage(url, percentage);
 }
 
 function moveInSpine(forward: boolean): void {
