@@ -26,9 +26,7 @@ export class DetailsModal extends BaseModal {
 			this.#coverImg.nextElementSibling?.remove();
 		} else {
 			const h = document.createElement("h1");
-			// TODO: extract to utils and fallback to filename
-			h.textContent =
-				about.pubMetadata.find(item => item.property == "title")?.value ?? "Untitled";
+			h.textContent = Context.getEpubTitle();
 			this.#coverImg.replaceWith(h);
 		}
 

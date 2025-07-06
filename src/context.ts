@@ -13,6 +13,7 @@ export class Context {
 	private static readingPosition: [URL, number] | null = null;
 
 	private static epubLang: string | null = null;
+	private static epubTitle: string | null = null;
 	static spineItemLang = "";
 
 	static prefsStore?: Store;
@@ -32,10 +33,27 @@ export class Context {
 
 	static getEpubLang(): string {
 		if (Context.epubLang == null) {
-			const langData = Context.openedEpub!.pubMetadata.find(item => item.property == "lang");
-			Context.epubLang = langData?.value ?? "";
+			const data = Context.getOpenedEpub().pubMetadata.find(
+				item => item.property == "language",
+			);
+			Context.epubLang = data?.value ?? "";
 		}
 		return Context.epubLang;
+	}
+
+	static getEpubTitle(): string {
+		if (Context.epubTitle == null) {
+			const data = Context.getOpenedEpub().pubMetadata.find(item => item.property == "title");
+			let title = data?.value;
+			if (!title) {
+				const path = Context.getOpenedEpub().filePath;
+				const i = path.lastIndexOf("/");
+				const j = path.lastIndexOf("\\");
+				title = path.slice((i > j ? i : j) + 1);
+			}
+			Context.epubTitle = title;
+		}
+		return Context.epubTitle;
 	}
 
 	private static getSpineIndex(): Map<string, number> {
