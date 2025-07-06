@@ -181,7 +181,14 @@ export class TaskRepeater {
 }
 
 function toResourceUri(uri: URL): string {
-	return convertFileSrc(uri.pathname.slice(1), "epub");
+	// NOTE: convertFileSrc(s, scheme) is
+	//  PLATFORM_SPECIFIC_PREFIX + encodeURIComponent(s)
+	// which means '/' in s will be escaped and the path structured is broken.
+	// So "" is used to make use of the platform-specific part,
+	// and append the pathname manually.
+	let tauriUrl = convertFileSrc("", "epub");
+	tauriUrl += uri.pathname.slice(1);
+	return tauriUrl;
 }
 
 export function setElementUrl(
