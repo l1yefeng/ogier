@@ -69,7 +69,6 @@ pub struct MetadataItem {
     pub value: String,
     pub lang: Option<String>,
     pub refined: Vec<MetadataRefinement>,
-    #[serde(skip_serializing)]
     pub legacy: bool,
 }
 

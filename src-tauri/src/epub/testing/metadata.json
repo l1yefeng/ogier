@@ -3,7 +3,8 @@
     "property": "identifier",
     "value": "urn:uuid:A1B0D67E-2E81-4DF5-9E67-A64CBE366809",
     "lang": null,
-    "refined": []
+    "refined": [],
+    "legacy": false
   },
   {
     "property": "identifier",
@@ -16,7 +17,8 @@
         "lang": null,
         "scheme": "onix:codelist5"
       }
-    ]
+    ],
+    "legacy": false
   },
   {
     "property": "source",
@@ -29,7 +31,8 @@
         "lang": null,
         "scheme": "onix:codelist5"
       }
-    ]
+    ],
+    "legacy": false
   },
   {
     "property": "title",
@@ -42,13 +45,15 @@
         "lang": null,
         "scheme": null
       }
-    ]
+    ],
+    "legacy": false
   },
   {
     "property": "language",
     "value": "en",
     "lang": null,
-    "refined": []
+    "refined": [],
+    "legacy": false
   },
   {
     "property": "creator",
@@ -73,18 +78,21 @@
         "lang": null,
         "scheme": null
       }
-    ]
+    ],
+    "legacy": false
   },
   {
     "property": "dcterms:modified",
     "value": "2011-01-01T12:00:00Z",
     "lang": null,
-    "refined": []
+    "refined": [],
+    "legacy": false
   },
   {
     "property": "legacy-prop",
     "value": "legacy-value",
     "lang": null,
-    "refined": []
+    "refined": [],
+    "legacy": true
   }
 ]

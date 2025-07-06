@@ -83,7 +83,6 @@ pub struct ResourceInfo {
 type ResourceIndex = usize;
 
 pub struct Epub {
-    base_url: url::Url,
     version: package::Version,
     metadata: package::Metadata,
     /// Info of resources appearing in manifest.
@@ -192,7 +191,6 @@ impl Epub {
         }
 
         let epub = Epub {
-            base_url,
             version: package.version,
             metadata: package.metadata,
             resources,
@@ -203,45 +201,6 @@ impl Epub {
         };
         Ok((epub, archive))
     }
-
-    // pub fn navigate_from(
-    //     &self,
-    //     current: &url::Url,
-    //     forward: bool,
-    // ) -> Result<Option<&package::ResourceItem>, UrlNotFoundErr> {
-    //     let Some(ResourceIndex(_ri, si)) = self.resource_indexes.get(current) else {
-    //         return Err(UrlNotFoundErr);
-    //     };
-    //     let Some(si) = si.clone() else {
-    //         // not in spine
-    //         return Ok(None);
-    //     };
-    //     let si = if forward {
-    //         if si == self.spine.len() - 1 {
-    //             return Ok(None);
-    //         }
-    //         si + 1
-    //     } else {
-    //         if si == 0 {
-    //             return Ok(None);
-    //         }
-    //         si - 1
-    //     };
-    //     let ri = self.spine[si];
-    //     Ok(Some(&self.resources[ri]))
-    // }
-
-    // /// Returns the content document item the navigation arrives at, and
-    // /// whether this item is in the spine.
-    // pub fn navigate_to(
-    //     &self,
-    //     dest: &url::Url,
-    // ) -> Result<(&package::ResourceItem, bool), UrlNotFoundErr> {
-    //     let Some(ResourceIndex(ri, si)) = self.resource_indexes.get(dest) else {
-    //         return Err(UrlNotFoundErr);
-    //     };
-    //     Ok((&self.resources[*ri], si.is_some()))
-    // }
 
     pub fn navigate_to_start(&self) -> &url::Url {
         // TODO proper landing page
@@ -342,8 +301,6 @@ fn parse_container_file<R: Read>(
     }
     Err(OneOf::new(ContainerFileErr))
 }
-
-// TODO: check the use of id and if # is optional
 
 #[cfg(test)]
 mod tests {

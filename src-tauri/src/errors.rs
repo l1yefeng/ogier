@@ -16,8 +16,6 @@ pub enum AnyErr {
     EpubUrlNotFound(#[from] crate::epub::UrlNotFoundErr),
     #[error("EPUB content error")]
     EpubContent,
-    #[error("EPUB navigation file is missing")]
-    EpubNoNav,
     // else
     #[error("Unknown internal error")]
     Unknown,
