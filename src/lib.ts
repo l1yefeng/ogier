@@ -60,23 +60,12 @@ export function loadContent(): void {
 	loadCustomizationContent();
 }
 
-// function loadImageElement(
-// 	elem: HTMLImageElement | SVGImageElement,
-// 	url: URL,
-// 	useUri: (uri: string) => void,
-// ): void {
-// 	// TODO: debugging, and meanwhile maybe we use `register_asynchronous_uri_scheme_protocol`
-// 	console.debug(`ENTER: loadImageElement(${url})`);
-// 	useUri(toResourceUri(url));
-// }
-
 /**
  * Call this at some point during the loading of a page (Docuemnt).
  *
  * @param head `<head>` element of the page the reader is loading.
  */
 async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]> {
-	// const linkedUrls: URL[] = [];
 	const stylesheetLinks: HTMLLinkElement[] = [];
 	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
 		const href = elemLink.getAttribute("href");
@@ -85,11 +74,8 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]>
 		if (url) {
 			setElementUrl(elemLink, url);
 			stylesheetLinks.push(elemLink);
-			// linkedUrls.push(url);
-			// elemLink.remove();
 		}
 	}
-	// await styler!.load(linkedUrls);
 
 	let cssInPage = "";
 	for (const elemStyle of head.querySelectorAll<HTMLStyleElement>("style")) {

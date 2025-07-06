@@ -7,7 +7,6 @@ export class Styler {
 	#appCss: CSSStyleSheet;
 	#filewiseStylesCss: CSSStyleSheet;
 	#styleElemsCss: CSSStyleSheet;
-	#linkedCssResources: Record<string, CSSStyleSheet>;
 
 	#filewiseStyles: CustomStyles | null = null;
 	#utf8Encoder = new TextEncoder();
@@ -17,7 +16,6 @@ export class Styler {
 		this.#appCss = new CSSStyleSheet();
 		this.#filewiseStylesCss = new CSSStyleSheet();
 		this.#styleElemsCss = new CSSStyleSheet();
-		this.#linkedCssResources = {};
 
 		this.#readerRoot.adoptedStyleSheets = [
 			this.#appCss,
@@ -77,41 +75,6 @@ export class Styler {
 
 		await this.#appCss.replace(css);
 	}
-
-	// load(urls: URL[]): Promise<void> {
-	// 	this.#readerRoot.adoptedStyleSheets.splice(
-	// 		3,
-	// 		this.#readerRoot.adoptedStyleSheets.length - 3,
-	// 	);
-
-	// 	const promises = urls.map(url =>
-	// 		new Promise((resolve: (value: CSSStyleSheet) => void, reject) => {
-	// 			if (this.#linkedCssResources[url.pathname]) {
-	// 				return resolve(this.#linkedCssResources[url.pathname]);
-	// 			}
-
-	// 			rs.getResource(url).then(css => {
-	// 				if (!css) {
-	// 					return reject(`Resource not found: ${url}`);
-	// 				}
-	// 				const stylesheet = new CSSStyleSheet();
-	// 				stylesheet.replace(css);
-	// 				this.#linkedCssResources[url.pathname] = stylesheet;
-	// 				return resolve(stylesheet);
-	// 			});
-	// 		}).then(stylesheet => {
-	// 			this.#readerRoot.adoptedStyleSheets.push(stylesheet);
-	// 		}),
-	// 	);
-
-	// 	return Promise.allSettled(promises).then(results => {
-	// 		for (const result of results) {
-	// 			if (result.status == "rejected") {
-	// 				console.error(`Failed to load css: ${result.reason}`);
-	// 			}
-	// 		}
-	// 	});
-	// }
 
 	setStyleElemsCss(css: string): void {
 		this.#styleElemsCss.replace(css);
