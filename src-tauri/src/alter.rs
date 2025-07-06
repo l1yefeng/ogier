@@ -174,7 +174,7 @@ pub fn alter_css<R: Read>(mut reader: R) -> Result<Vec<u8>, AnyErr> {
 
 fn transform_xhtml<R: BufRead>(reader: R) -> Result<Vec<u8>, quick_xml::Error> {
     let mut reader = Reader::from_reader(reader);
-    reader.config_mut().trim_text(true);
+    reader.config_mut().trim_text(false);
 
     let mut buffer = Vec::new();
     let mut writer = Writer::new(io::Cursor::new(Vec::new()));
@@ -278,10 +278,14 @@ mod tests {
                 }
             </style>
         </head></html>"#;
-        let expected = r#"<html><head><style>p {
+        let expected = r#"<html><head>
+            <style>
+                p {
                     color: blue;
                     line-height: calc(var(--og-line-height-scale) * 1.00);
-                }</style></head></html>"#;
+                }
+            </style>
+        </head></html>"#;
         let reader = input.as_bytes();
         assert_eq!(Vec::from(expected), alter_xhtml(reader).unwrap());
     }
