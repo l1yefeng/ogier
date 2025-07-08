@@ -1,5 +1,5 @@
 import { clamp, FilewiseStylesKey, FilewiseStyles, FontPrefer } from "./base";
-import { Context } from "./context";
+import { getContext } from "./context";
 
 export class Styler {
 	#readerRoot: ShadowRoot;
@@ -26,7 +26,7 @@ export class Styler {
 
 	async loadAppPrefs(): Promise<void> {
 		// TODO handle better
-		const prefs = Context.prefsStore;
+		const prefs = getContext().prefsStore;
 		if (!prefs) return;
 
 		const fontSubstitute = await prefs.get<Record<string, string>>("font.substitute");

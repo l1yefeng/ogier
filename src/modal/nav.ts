@@ -1,8 +1,9 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { Context } from "../context";
-import { toc_default_title } from "../strings.json";
 import { fetchXml } from "../base";
+import { getReaderContext } from "../context";
+
+import { toc_default_title } from "../strings.json";
 
 /**
  * The central element is a `<nav>` element.
@@ -28,7 +29,7 @@ export class NavModal extends BaseModal {
 
 	async init(): Promise<void> {
 		this.locked = false;
-		const { pubTocUrl: url, pubTocIsLegacy: isLegacy } = Context.getOpenedEpub();
+		const { pubTocUrl: url, pubTocIsLegacy: isLegacy } = getReaderContext().about;
 		if (!url) {
 			throw new Error("No TOC");
 		}
@@ -93,7 +94,7 @@ export class NavModal extends BaseModal {
 	}
 
 	onContextLangChange(): void {
-		const lang = Context.getEpubLang();
+		const lang = getReaderContext().epubLang;
 		if (lang) {
 			// If already set, it is perhaps set when creating the nav using its own lang
 			if (!this.#nav.lang) {
@@ -132,7 +133,7 @@ function makeUiFromNcx(
 	}
 	navElem.replaceChildren(ol);
 
-	navElem.lang = doc.documentElement.lang || Context.getEpubLang();
+	navElem.lang = doc.documentElement.lang || getReaderContext().epubLang;
 }
 
 function makeUiFromNav(
@@ -160,7 +161,7 @@ function makeUiFromNav(
 	makeUiOlFromNavOlInPlace(ol, url);
 	navElem.replaceChildren(ol);
 
-	navElem.lang = nav.lang || doc.documentElement.lang || Context.getEpubLang();
+	navElem.lang = nav.lang || doc.documentElement.lang || getReaderContext().epubLang;
 }
 
 function makeUiOlFromNavOlInPlace(ol: HTMLOListElement, navDocUrl: URL): void {

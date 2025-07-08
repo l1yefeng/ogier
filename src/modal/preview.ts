@@ -1,6 +1,6 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { Context } from "../context";
+import { getReaderContext } from "../context";
 
 export class PreviewModal extends BaseModal {
 	#contentDiv: HTMLElement;
@@ -15,7 +15,7 @@ export class PreviewModal extends BaseModal {
 	show(floatingContentRoot: HTMLElement): void {
 		if (ModalCoordinator.show(this)) {
 			this.#contentDiv.replaceChildren(...floatingContentRoot.childNodes);
-			this.#contentDiv.lang = Context.spineItemLang || Context.getEpubLang();
+			this.#contentDiv.lang = getReaderContext().spineItemLang || getReaderContext().epubLang;
 		}
 	}
 

@@ -2,92 +2,96 @@ import { Store } from "@tauri-apps/plugin-store";
 
 import { AboutPub } from "./base";
 
-export class Context {
+type UrlAndPercentage = [URL, number | null];
+
+export class ReaderContext {
 	/**
 	 * Opened EPUB's (static) info.
 	 */
-	private static openedEpub: AboutPub | null = null;
+	readonly about: AboutPub;
+	readonly epubLang: string;
+	readonly epubTitle: string;
 
-	private static spineIndex: Map<string, number> | null = null;
-	// FIXME: what if non-linear spine item?
-	private static readingPosition: [URL, number] | null = null;
+	/**
+	 * A mapping from URL to its index in spine.
+	 * NOTE: URL in spine ==> URL is of a content document.
+	 */
+	#spineIndexLazy: Map<string, number> | null = null;
 
-	private static epubLang: string | null = null;
-	private static epubTitle: string | null = null;
-	static spineItemLang = "";
+	/**
+	 * Jumping history and currently reading page.
+	 */
+	#jumpNavHistory: UrlAndPercentage[] = [];
+	#currentPosition: UrlAndPercentage;
 
-	static prefsStore?: Store;
+	spineItemLang = "";
 
-	static setOpenedEpub(aboutPub: AboutPub): void {
-		Context.openedEpub = aboutPub;
-		Context.epubLang = null;
-		Context.spineIndex = null;
-	}
+	constructor(about: AboutPub, startPosition: UrlAndPercentage) {
+		this.about = about;
 
-	static getOpenedEpub(): AboutPub {
-		if (Context.openedEpub == null) {
-			throw new Error("getOpenedEpub is called when it should not be");
+		this.epubLang = about.pubMetadata.find(item => item.property == "language")?.value ?? "";
+
+		let title = about.pubMetadata.find(item => item.property == "title")?.value;
+		if (!title) {
+			const path = about.filePath;
+			const i = path.lastIndexOf("/");
+			const j = path.lastIndexOf("\\");
+			title = path.slice((i > j ? i : j) + 1);
 		}
-		return Context.openedEpub;
+		this.epubTitle = title;
+
+		this.#currentPosition = startPosition;
 	}
 
-	static getEpubLang(): string {
-		if (Context.epubLang == null) {
-			const data = Context.getOpenedEpub().pubMetadata.find(
-				item => item.property == "language",
-			);
-			Context.epubLang = data?.value ?? "";
-		}
-		return Context.epubLang;
-	}
-
-	static getEpubTitle(): string {
-		if (Context.epubTitle == null) {
-			const data = Context.getOpenedEpub().pubMetadata.find(item => item.property == "title");
-			let title = data?.value;
-			if (!title) {
-				const path = Context.getOpenedEpub().filePath;
-				const i = path.lastIndexOf("/");
-				const j = path.lastIndexOf("\\");
-				title = path.slice((i > j ? i : j) + 1);
-			}
-			Context.epubTitle = title;
-		}
-		return Context.epubTitle;
-	}
-
-	private static getSpineIndex(): Map<string, number> {
-		if (Context.spineIndex == null) {
+	private get spineIndex(): Map<string, number> {
+		if (this.#spineIndexLazy == null) {
 			const m = new Map<string, number>();
-			Context.getOpenedEpub().pubSpine.forEach((url, index) => {
+			this.about.pubSpine.forEach((url, index) => {
 				m.set(url.pathname, index);
 			});
-			Context.spineIndex = m;
+			this.#spineIndexLazy = m;
 		}
-		return Context.spineIndex;
+		return this.#spineIndexLazy;
 	}
 
-	static setReadingPositionUrl(url: URL): void {
-		const index = Context.getSpineIndex().get(url.pathname)!;
-		Context.readingPosition = [url, index];
-	}
-
-	static setReadingPositionInSpine(index: number): void {
-		const url = Context.getOpenedEpub().pubSpine[index];
-		Context.readingPosition = [url, index];
-	}
-
-	static getReadingPositionUrl(): URL {
-		if (Context.readingPosition == null) {
-			throw new Error("getReadingPositionUrl is called when it should not be");
+	updateReadingPosition(position: UrlAndPercentage, pushToHistory: boolean): void {
+		if (pushToHistory) {
+			this.#jumpNavHistory.push(this.#currentPosition);
 		}
-		return Context.readingPosition[0];
+		this.#currentPosition = position;
 	}
 
-	static getReadingPositionInSpine(): number {
-		if (Context.readingPosition == null) {
-			throw new Error("getReadingPositionInSpine is called when it should not be");
-		}
-		return Context.readingPosition[1];
+	get readingPosition(): URL {
+		return this.#currentPosition[0];
 	}
+	get readingPositionInSpine(): number | undefined {
+		const url = this.readingPosition;
+		return this.spineIndex.get(url.pathname);
+	}
+}
+
+export class GlobalContext {
+	readerContext?: ReaderContext;
+	prefsStore?: Store;
+
+	private constructor() {}
+
+	// Singleton
+	static self?: GlobalContext;
+	static get(): GlobalContext {
+		if (!GlobalContext.self) GlobalContext.self = new GlobalContext();
+		return GlobalContext.self;
+	}
+}
+
+export function getContext(): GlobalContext {
+	return GlobalContext.get();
+}
+
+/**
+ * Only call when reader context is created.
+ * @returns getContext().pubContext!
+ */
+export function getReaderContext(): ReaderContext {
+	return getContext().readerContext!;
 }

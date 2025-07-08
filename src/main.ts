@@ -10,7 +10,7 @@ import { load } from "@tauri-apps/plugin-store";
 import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./strings.json";
 
 import { AboutPub, takeSessionInProgress } from "./base";
-import { Context } from "./context";
+import { getContext } from "./context";
 import * as rs from "./invoke";
 import { initReaderFrame, loadContent } from "./lib";
 
@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	loadContent();
 
 	load("prefs.json", { autoSave: true }).then(store => {
-		Context.prefsStore = store;
+		getContext().prefsStore = store;
 	});
 
 	if (takeSessionInProgress()) {

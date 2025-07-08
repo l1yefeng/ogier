@@ -11,8 +11,8 @@ import {
 import {
 	AboutPub,
 	anchoredSamePageLocation,
-	FilewiseStyles,
 	fetchXml,
+	FilewiseStyles,
 	FontPrefer,
 	getCurrentPosition,
 	getCurrentPositionInverse,
@@ -22,7 +22,7 @@ import {
 	setElementUrl,
 	TaskRepeater,
 } from "./base";
-import { Context } from "./context";
+import { getContext, getReaderContext, ReaderContext } from "./context";
 import {
 	activateCustomizationInput,
 	commitCustomStylesFromSaved,
@@ -70,7 +70,7 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]>
 	for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
 		const href = elemLink.getAttribute("href");
 		if (!href) continue;
-		const url = URL.parse(href, Context.getReadingPositionUrl());
+		const url = URL.parse(href, getReaderContext().readingPosition);
 		if (url) {
 			setElementUrl(elemLink, url);
 			stylesheetLinks.push(elemLink);
@@ -91,25 +91,18 @@ async function loadPageStyles(head: HTMLHeadElement): Promise<HTMLLinkElement[]>
 	return stylesheetLinks;
 }
 
-async function renderBookPage(
-	url: URL,
-	percentage: number | null,
-	indexInSpine?: number,
-): Promise<void> {
+async function renderBookPage(url: URL, percentage: number | null): Promise<void> {
 	console.debug("ENTER: renderBookPage");
-	if (indexInSpine != undefined) {
-		Context.setReadingPositionInSpine(indexInSpine);
-	} else {
-		Context.setReadingPositionUrl(url);
-	}
+
+	const readerContext = getReaderContext();
 
 	// Remove everything first
 	readerShadowRoot!.replaceChildren();
 
 	console.debug("parsing doc");
 	const doc = await fetchXml(url, true);
-	Context.spineItemLang = doc.documentElement.lang;
-	elemReaderHost!.lang = Context.spineItemLang || Context.getEpubLang();
+	readerContext.spineItemLang = doc.documentElement.lang;
+	elemReaderHost!.lang = readerContext.spineItemLang || readerContext.epubLang;
 	const pageBody = doc.body;
 
 	// load all images: <img> and svg <image>
@@ -188,10 +181,10 @@ async function renderBookPage(
 	saveReadingProgressTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();
 		const bodyRect = pageBody.getBoundingClientRect();
-		rs.setReadingPosition(
-			Context.getReadingPositionUrl(),
-			getCurrentPosition(hostRect, bodyRect),
-		);
+		const url = getReaderContext().readingPosition;
+		const percentage = getCurrentPosition(hostRect, bodyRect);
+		rs.setReadingPosition(url, percentage);
+		getReaderContext().updateReadingPosition([url, percentage], false);
 	});
 
 	markSessionInProgress();
@@ -264,9 +257,12 @@ function previewSamePageLocation(anchor: HTMLElement, elemNoteId: string): void 
 	}
 }
 
-async function navigateTo(url: URL): Promise<void> {
+async function jumpTo(url: URL): Promise<void> {
 	const id = url.hash.slice(1);
 	url.hash = "";
+	// TODO (a) the repeated task should be run exactly now before pushing to history
+	//      (b) the percentage is only necessary at this point when being pushed to history.
+	getReaderContext().updateReadingPosition([url, 0.0], true);
 	await renderBookPage(url, 0.0);
 	if (id) {
 		readerShadowRoot!.getElementById(id)?.scrollIntoView();
@@ -290,7 +286,7 @@ function handleClickInReader(event: PointerEvent): void {
 		} else {
 			const url = URL.parse(
 				elemAnchor.getAttribute("href") ?? "",
-				Context.getReadingPositionUrl(),
+				getReaderContext().readingPosition,
 			);
 			if (url) {
 				if (
@@ -313,7 +309,7 @@ function handleClickInReader(event: PointerEvent): void {
 							window.alert(`Error opening ${url}: ${err}`);
 						});
 				} else {
-					navigateTo(url);
+					jumpTo(url);
 				}
 			}
 		}
@@ -338,16 +334,12 @@ async function initDetailsAndTocModals(): Promise<void> {
 		elemTocButton!.title = toc_unavailable_message;
 		return;
 	}
-	navModal.setupTocGoTo(navigateTo);
+	navModal.setupTocGoTo(jumpTo);
 
 	webWindow.listen("menu/f_n", () => navModal.show());
 }
 
 export async function initReaderFrame(about: AboutPub): Promise<void> {
-	Context.setOpenedEpub(about);
-
-	initDetailsAndTocModals(); // don't wait
-
 	// show reader
 	elemFrame!.style.display = ""; // use display value in css
 	if (readerShadowRoot == null) {
@@ -366,14 +358,20 @@ export async function initReaderFrame(about: AboutPub): Promise<void> {
 	});
 
 	// retrieve reading position
-	const position = await rs.getReadingPosition();
-	const [url, percentage] = position == null ? [about.pubLandingPage, null] : position;
-	await renderBookPage(url, percentage);
+	const position = (await rs.getReadingPosition()) ?? [about.pubLandingPage, null];
+	getContext().readerContext = new ReaderContext(about, position);
+	initDetailsAndTocModals(); // don't wait
+	await renderBookPage(position[0], position[1]);
 }
 
 function moveInSpine(forward: boolean): void {
-	const spine = Context.getOpenedEpub().pubSpine;
-	let index = Context.getReadingPositionInSpine();
+	const readerContext = getReaderContext();
+	const spine = readerContext.about.pubSpine;
+	let index = readerContext.readingPositionInSpine;
+	if (index == undefined) {
+		// If not in spine, do nothing.
+		return;
+	}
 
 	index += forward ? +1 : -1;
 	if (index < 0 || index >= spine.length) {
@@ -381,7 +379,8 @@ function moveInSpine(forward: boolean): void {
 		return;
 	}
 	const percentage = forward ? 0.0 : 1.0;
-	renderBookPage(spine[index], percentage, index);
+	readerContext.updateReadingPosition([spine[index], percentage], false);
+	renderBookPage(spine[index], percentage);
 }
 
 function handleKeyEvent(event: KeyboardEvent): void {

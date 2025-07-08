@@ -1,6 +1,6 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { Context } from "../context";
+import { getReaderContext } from "../context";
 import { EpubMetadataItem, setElementUrl } from "../base";
 
 export class DetailsModal extends BaseModal {
@@ -20,13 +20,13 @@ export class DetailsModal extends BaseModal {
 
 	init(): void {
 		this.locked = false;
-		const about = Context.getOpenedEpub();
+		const about = getReaderContext().about;
 		if (about.pubCoverUrl) {
 			setElementUrl(this.#coverImg, about.pubCoverUrl);
 			this.#coverImg.nextElementSibling?.remove();
 		} else {
 			const h = document.createElement("h1");
-			h.textContent = Context.getEpubTitle();
+			h.textContent = getReaderContext().epubTitle;
 			this.#coverImg.replaceWith(h);
 		}
 
@@ -89,11 +89,11 @@ function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
 	// dd
 	if (data.lang) {
 		dd.lang = data.lang;
-	} else if (Context.getEpubLang()) {
+	} else if (getReaderContext().epubLang) {
 		if (
 			["contributor", "creator", "description", "publisher", "title"].includes(data.property)
 		) {
-			dd.lang = Context.getEpubLang();
+			dd.lang = getReaderContext().epubLang;
 		}
 	}
 	dd.innerHTML = data.value;
