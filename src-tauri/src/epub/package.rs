@@ -90,6 +90,7 @@ type Manifest = HashMap<Id, ResourceItem>;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Itemref {
     pub idref: Id,
+    pub linear: bool,
     pub properties: Option<PropertiesValue>,
 }
 
@@ -402,8 +403,11 @@ impl<R: Read> PackageParser<R> {
                     let idref = idref.ok_or(OneOf::new(Error::Spine))?;
                     let properties = Self::get_attribute_decoded(&e, b"properties", decoder)
                         .map_err(OneOf::new)?;
+                    let linear_value = Self::get_attribute(&e, b"linear").map_err(OneOf::new)?;
+                    let linear = !linear_value.is_some_and(|v| v.as_ref() == b"no");
                     itemrefs.push(Itemref {
                         idref: idref.into(),
+                        linear,
                         properties: properties.map(PropertiesValue),
                     });
                 }
@@ -546,6 +550,7 @@ mod tests {
             assert_eq!(
                 vec![Itemref {
                     idref: b"r4915".as_slice().into(),
+                    linear: true,
                     properties: None
                 },],
                 spine.itemrefs

@@ -153,6 +153,9 @@ impl Epub {
         let mut resource_indexes = HashMap::new();
         let mut spine = Vec::new();
         for itemref in &package.spine.itemrefs {
+            if !itemref.linear {
+                continue;
+            }
             let item_id: &package::Id = &itemref.idref;
             let item = package
                 .manifest

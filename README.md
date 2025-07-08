@@ -1,14 +1,21 @@
-# Ogier EPUB Reader
+OgierEPUB
+=========
 
-Small and fast.
+EPUB reader that is boring, small, fast.
 
-## Definitions
+Definitions
+-----------
 
 ### EPUB
 
-- EPUB. The file format. Or, the EPUB-formatted file.
-- Book.
+- EPUB.
+  The file format. Or, the EPUB-formatted file.
+- Pub.
+  Often there's tendency to call it a "book".
 - Content document (Page).
+  Technically, any XHTML or SVG by EPUB3 specs.
+  The spine contains only content docs,
+  but a content doc may not be in the spine.
 - Spine.
 - Metadata.
 
@@ -19,20 +26,32 @@ Small and fast.
 - Reader settings. Settings that control the reader.
 - Filewise styles. Settings for the reader style that apply to the current EPUB.
 
-## TODO
+TODO
+----
 
-- SVG content - find a test case.
-- Fetch font from archive
-- Other methods to customize reader (when UI is too narrow).
-- Dark theme.
-- New window?
-- Welcome screen list recent files.
-- Optimize: Open "Wild Life" faster.
-- Optimize: cache; https://crates.io/crates/lru
-- Optimize: css loading
-- Use keyup and repeat. Make repeat count the distance to jump.
-- Error handling especially in menus.rs
-- Mimetype application/page-template+xml etc.
+### Testing
+
+- [ ] SVG content - find a test case.
+
+### Bugs
+
+- [ ] Window size does not preserve
+
+### Optimizations
+
+- [ ] Menu has a large padding in front (Linux, KDE)
+- [ ] Open "Wild Life" faster.
+
+### Features
+
+- [ ] At the bottom, add <- and ->; when showing non-linear page,
+      hide those and show a "back"; when jumped here show "back" in addition.
+      To support those a history (stack) needs to be added to Context.
+- [ ] Fetch font from archive
+- [ ] Other methods to customize reader (when UI is too narrow).
+- [ ] Dark theme.
+- [ ] New window?
+- [ ] Welcome screen list recent files.
 
 ## App persistent state
 
@@ -68,7 +87,7 @@ interface PerEpubCustomization {
 progress.json
 
 ```ts
-interface Progess {
+interface Progress {
     positionInSpine: number;
     positionInItem: number;
 }
