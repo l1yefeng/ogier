@@ -62,14 +62,12 @@ input {
 	align-items: center;
 	text-wrap-mode: nowrap;
 	overflow: hidden;
+	justify-content: space-between;
 	#og-toc-button {
 		flex-shrink: 1;
 		min-width: 6em;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-	#og-spine-position {
-		margin-inline: auto;
 	}
 	#og-customization {
 		margin-inline-start: 2ch;

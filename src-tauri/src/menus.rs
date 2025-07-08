@@ -276,8 +276,8 @@ pub mod help {
         use tauri::menu::{AboutMetadata, AboutMetadataBuilder};
 
         pub(super) const TEXT: &str = "License && Copyrights";
-        const COMMENTS: &str = "Ogier: a fast and simple EPUB reader (freeware)";
-        const COPYRIGHTS: &str = "Copyright 2025, Ogier EPUB Reader developers";
+        const COMMENTS: &str = "OgierEPUB: boring simple EPUB reader (freeware)";
+        const COPYRIGHTS: &str = "Copyright 2025, OgierEPUB developers";
 
         pub(super) fn make_metadata<'a>() -> AboutMetadata<'a> {
             AboutMetadataBuilder::new()

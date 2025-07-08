@@ -40,7 +40,6 @@ let elemFrame: HTMLElement | null;
 let elemReaderHost: HTMLElement | null;
 let elemTocButton: HTMLButtonElement | null;
 let elemTocBtnLabel: HTMLElement | null;
-let elemSpinePosition: HTMLElement | null;
 
 // Other global variables. Lazily initialized.
 //
@@ -56,7 +55,6 @@ export function loadContent(): void {
 	elemReaderHost = document.getElementById("og-reader-host") as HTMLDivElement;
 	elemTocButton = document.getElementById("og-toc-button") as HTMLButtonElement;
 	elemTocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
-	elemSpinePosition = document.getElementById("og-spine-position") as HTMLElement;
 	loadCustomizationContent();
 }
 
@@ -153,8 +151,6 @@ async function renderBookPage(url: URL, percentage: number | null): Promise<void
 		);
 		elemReaderHost!.scroll({ top, behavior: "instant" });
 	}
-
-	elemSpinePosition!.textContent = `to be removed`;
 
 	refreshTocBtnLabelTask.restart(() => {
 		const hostRect = elemReaderHost!.getBoundingClientRect();

@@ -1,7 +1,7 @@
 OgierEPUB
 =========
 
-EPUB reader that is boring, small, fast.
+Boring simple EPUB reader.
 
 Definitions
 -----------
