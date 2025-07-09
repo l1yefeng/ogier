@@ -254,6 +254,19 @@ pub mod help {
     pub const ID: &str = "h";
     const TEXT: &str = "Help";
 
+    pub mod open_dev_tools {
+        use tauri::Manager;
+
+        pub const ID: &str = "odt";
+        pub(super) const TEXT: &str = "Open Developer Tools";
+
+        pub fn handle(app: &tauri::AppHandle) {
+            if let Some(ww) = app.get_webview_window("main") {
+                ww.open_devtools();
+            }
+        }
+    }
+
     pub mod version {
         pub const ID: &str = "h_v";
         pub(super) const TEXT: &str = "Version: 0.0.0";
@@ -293,6 +306,8 @@ pub mod help {
     {
         SubmenuBuilder::new(app, TEXT)
             .id(ID)
+            .text(open_dev_tools::ID, open_dev_tools::TEXT)
+            .separator()
             .text(version::ID, version::TEXT)
             .text(website_support::ID, website_support::TEXT)
             .about_with_text(
@@ -320,6 +335,7 @@ pub fn handle_menu_event(app: &tauri::AppHandle, id: &str) {
         }
         view::open_filewise_styles::ID => view::open_filewise_styles::handle(app),
 
+        help::open_dev_tools::ID => help::open_dev_tools::handle(app),
         help::version::ID => (),
         help::website_support::ID => help::website_support::handle(app),
 
