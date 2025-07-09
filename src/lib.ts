@@ -22,7 +22,7 @@ import {
 	setElementUrl,
 	TaskRepeater,
 } from "./base";
-import { getContext, getReaderContext, ReaderContext } from "./context";
+import { getGlobalContext, getReaderContext, ReaderContext } from "./context";
 import {
 	activateCustomizationInput,
 	commitCustomStylesFromSaved,
@@ -355,7 +355,7 @@ export async function initReaderFrame(about: AboutPub): Promise<void> {
 
 	// retrieve reading position
 	const position = (await rs.getReadingPosition()) ?? [about.pubLandingPage, null];
-	getContext().readerContext = new ReaderContext(about, position);
+	getGlobalContext().readerContext = new ReaderContext(about, position);
 	initDetailsAndTocModals(); // don't wait
 	await renderBookPage(position[0], position[1]);
 }

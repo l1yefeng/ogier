@@ -84,7 +84,7 @@ export class GlobalContext {
 	}
 }
 
-export function getContext(): GlobalContext {
+export function getGlobalContext(): GlobalContext {
 	return GlobalContext.get();
 }
 
@@ -93,5 +93,5 @@ export function getContext(): GlobalContext {
  * @returns getContext().pubContext!
  */
 export function getReaderContext(): ReaderContext {
-	return getContext().readerContext!;
+	return getGlobalContext().readerContext!;
 }
