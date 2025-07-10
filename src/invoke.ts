@@ -7,7 +7,13 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import { AboutPub, AboutPubJson, FilewiseStyles, aboutPubFromJson } from "./base";
+import {
+	AboutPub,
+	AboutPubJson,
+	FilewiseStyles,
+	UrlAndPercentage,
+	aboutPubFromJson,
+} from "./base";
 
 export function getFilewiseStyles(): Promise<Partial<FilewiseStyles> | null> {
 	return invoke<string>("get_filewise_styles").then(savedSettings => {
@@ -44,7 +50,7 @@ export function setReadingPosition(url: URL, percentage: number): Promise<void> 
 	const args = { url, percentage };
 	return invoke<void>("set_reading_position", args);
 }
-export function getReadingPosition(): Promise<[URL, number | null] | null> {
+export function getReadingPosition(): Promise<UrlAndPercentage | null> {
 	return invoke<[string, number | null] | null>("get_reading_position").then(res => {
 		if (res == null) return null;
 		const [url, percentage] = res;

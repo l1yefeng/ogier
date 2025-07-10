@@ -1,7 +1,6 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { getReaderContext } from "../context";
-import { EpubMetadataItem, setElementUrl } from "../base";
+import { AboutPub, EpubMetadataItem, PubHelper, setElementUrl } from "../base";
 
 export class DetailsModal extends BaseModal {
 	#bookDl: HTMLDListElement;
@@ -18,33 +17,34 @@ export class DetailsModal extends BaseModal {
 		ModalCoordinator.modals["details"] = this;
 	}
 
-	init(): void {
+	init(pub: AboutPub, pubHelper: PubHelper): void {
 		this.locked = false;
-		const about = getReaderContext().about;
-		if (about.pubCoverUrl) {
-			setElementUrl(this.#coverImg, about.pubCoverUrl);
+		if (pub.pubCoverUrl) {
+			setElementUrl(this.#coverImg, pub.pubCoverUrl);
 			this.#coverImg.nextElementSibling?.remove();
 		} else {
 			const h = document.createElement("h1");
-			h.textContent = getReaderContext().epubTitle;
+			h.textContent = pubHelper.title;
 			this.#coverImg.replaceWith(h);
 		}
 
-		this.#bookDl.replaceChildren(...about.pubMetadata.flatMap(createDetailsDlItemRich));
+		this.#bookDl.replaceChildren(
+			...pub.pubMetadata.flatMap(item => createDetailsDlItemRich(item, pubHelper.lang)),
+		);
 
 		this.#fileDl.replaceChildren();
-		this.#fileDl.append(...createDetailsDlItem("Path", about.filePath));
+		this.#fileDl.append(...createDetailsDlItem("Path", pub.filePath));
 		this.#fileDl.append(
-			...createDetailsDlItem("Size", `${about.fileSize.toLocaleString()} bytes`),
+			...createDetailsDlItem("Size", `${pub.fileSize.toLocaleString()} bytes`),
 		);
-		if (about.fileCreated) {
+		if (pub.fileCreated) {
 			this.#fileDl.append(
-				...createDetailsDlItem("Created at", about.fileCreated.toLocaleString()),
+				...createDetailsDlItem("Created at", pub.fileCreated.toLocaleString()),
 			);
 		}
-		if (about.fileModified) {
+		if (pub.fileModified) {
 			this.#fileDl.append(
-				...createDetailsDlItem("Modified at", about.fileModified.toLocaleString()),
+				...createDetailsDlItem("Modified at", pub.fileModified.toLocaleString()),
 			);
 		}
 	}
@@ -61,7 +61,7 @@ export class DetailsModal extends BaseModal {
 	}
 }
 
-function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
+function createDetailsDlItemRich(data: EpubMetadataItem, pubLang: string): HTMLElement[] {
 	const dt = document.createElement("dt");
 	const dd = document.createElement("dd");
 
@@ -89,11 +89,11 @@ function createDetailsDlItemRich(data: EpubMetadataItem): HTMLElement[] {
 	// dd
 	if (data.lang) {
 		dd.lang = data.lang;
-	} else if (getReaderContext().epubLang) {
+	} else if (pubLang) {
 		if (
 			["contributor", "creator", "description", "publisher", "title"].includes(data.property)
 		) {
-			dd.lang = getReaderContext().epubLang;
+			dd.lang = pubLang;
 		}
 	}
 	dd.innerHTML = data.value;

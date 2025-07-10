@@ -6,6 +6,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 export const APP_NAME = "OgierEPUB";
 
+export type UrlAndPercentage = [URL, number | null];
+
 export interface AboutPubJson {
 	// file
 	filePath: string;
@@ -68,6 +70,34 @@ export function aboutPubFromJson(json: AboutPubJson): AboutPub {
 		pubTocIsLegacy,
 		pubLandingPage: URL.parse(pubLandingPage)!,
 	};
+}
+
+export class PubHelper {
+	readonly lang: string;
+	readonly title: string;
+	#spineIndex: Map<string, number>;
+
+	constructor(about: AboutPub) {
+		this.lang = about.pubMetadata.find(item => item.property == "language")?.value ?? "";
+
+		let title = about.pubMetadata.find(item => item.property == "title")?.value;
+		if (!title) {
+			const path = about.filePath;
+			const i = path.lastIndexOf("/");
+			const j = path.lastIndexOf("\\");
+			title = path.slice((i > j ? i : j) + 1);
+		}
+		this.title = title;
+
+		this.#spineIndex = new Map<string, number>();
+		about.pubSpine.forEach((url, index) => {
+			this.#spineIndex.set(url.pathname, index);
+		});
+	}
+
+	indexInSpine(url: URL): number | undefined {
+		return this.#spineIndex.get(url.pathname);
+	}
 }
 
 export enum FilewiseStylesKey {
@@ -173,11 +203,15 @@ export class TaskRepeater {
 	}
 
 	restart(f: () => void): void {
+		this.stop();
+		f();
+		this.#handle = window.setInterval(f, this.#intervalMs);
+	}
+
+	stop(): void {
 		if (this.#handle != null) {
 			window.clearInterval(this.#handle);
 		}
-		f();
-		this.#handle = window.setInterval(f, this.#intervalMs);
 	}
 }
 
@@ -196,6 +230,9 @@ export function setElementUrl(
 	element: HTMLAnchorElement | HTMLImageElement | SVGImageElement | HTMLLinkElement,
 	url: URL,
 ): void {
+	if (url.protocol != "epub:") {
+		return;
+	}
 	const tauriUrl = toResourceUri(url);
 	if (element instanceof HTMLAnchorElement) {
 		element.href = tauriUrl;

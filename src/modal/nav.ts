@@ -1,7 +1,6 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { fetchXml } from "../base";
-import { getReaderContext } from "../context";
+import { AboutPub, fetchXml, PubHelper } from "../base";
 
 import { toc_default_title } from "../strings.json";
 
@@ -27,18 +26,18 @@ export class NavModal extends BaseModal {
 		ModalCoordinator.modals["nav"] = this;
 	}
 
-	async init(): Promise<void> {
+	async init(pub: AboutPub, pubHelper: PubHelper): Promise<void> {
 		this.locked = false;
-		const { pubTocUrl: url, pubTocIsLegacy: isLegacy } = getReaderContext().about;
+		const { pubTocUrl: url, pubTocIsLegacy: isLegacy } = pub;
 		if (!url) {
 			throw new Error("No TOC");
 		}
 		const doc = await fetchXml(url, false);
 
 		if (isLegacy) {
-			makeUiFromNcx(doc, url, this.#nav, this.#title);
+			makeUiFromNcx(doc, url, this.#nav, this.#title, pubHelper.lang);
 		} else {
-			makeUiFromNav(doc, url, this.#nav, this.#title);
+			makeUiFromNav(doc, url, this.#nav, this.#title, pubHelper.lang);
 		}
 	}
 
@@ -93,16 +92,6 @@ export class NavModal extends BaseModal {
 		return null;
 	}
 
-	onContextLangChange(): void {
-		const lang = getReaderContext().epubLang;
-		if (lang) {
-			// If already set, it is perhaps set when creating the nav using its own lang
-			if (!this.#nav.lang) {
-				this.#nav.lang = lang;
-			}
-		}
-	}
-
 	// Singleton
 	static self?: NavModal;
 	static get(): NavModal {
@@ -116,6 +105,7 @@ function makeUiFromNcx(
 	url: URL,
 	navElem: HTMLElement,
 	titleElem: HTMLElement,
+	pubLang: string,
 ): void {
 	// find and set title
 	const docTitleElem = doc.querySelector("docTitle");
@@ -133,7 +123,7 @@ function makeUiFromNcx(
 	}
 	navElem.replaceChildren(ol);
 
-	navElem.lang = doc.documentElement.lang || getReaderContext().epubLang;
+	navElem.lang = doc.documentElement.lang || pubLang;
 }
 
 function makeUiFromNav(
@@ -141,6 +131,7 @@ function makeUiFromNav(
 	url: URL,
 	navElem: HTMLElement,
 	titleElem: HTMLElement,
+	pubLang: string,
 ): void {
 	// find <nav> in doc
 	const nav = doc.querySelector<HTMLElement>("nav:has(>ol)");
@@ -161,7 +152,7 @@ function makeUiFromNav(
 	makeUiOlFromNavOlInPlace(ol, url);
 	navElem.replaceChildren(ol);
 
-	navElem.lang = nav.lang || doc.documentElement.lang || getReaderContext().epubLang;
+	navElem.lang = nav.lang || doc.documentElement.lang || pubLang;
 }
 
 function makeUiOlFromNavOlInPlace(ol: HTMLOListElement, navDocUrl: URL): void {

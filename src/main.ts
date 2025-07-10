@@ -12,7 +12,7 @@ import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./s
 import { AboutPub, takeSessionInProgress } from "./base";
 import { getGlobalContext } from "./context";
 import * as rs from "./invoke";
-import { initReaderFrame, loadContent } from "./lib";
+import { ReadScreen } from "./readscreen";
 
 function chooseAndMaybeOpenFile(): Promise<void> {
 	return open({
@@ -54,12 +54,16 @@ function enableDragAndDrop(): void {
 	});
 }
 
+function startReading(aboutPub: AboutPub): void {
+	getGlobalContext().readScreen = new ReadScreen(aboutPub);
+}
+
 function openChosenFileAt(path: string): Promise<void> {
 	return rs
 		.openEpub(path)
 		.then(about => {
 			showClickToOpen(false);
-			initReaderFrame(about); // don't wait
+			startReading(about); // don't wait
 		})
 		.catch(window.alert);
 }
@@ -73,7 +77,7 @@ function showClickToOpen(yes: boolean): HTMLElement {
 
 function start(about: null | AboutPub): void {
 	if (about) {
-		initReaderFrame(about); // don't wait
+		startReading(about); // don't wait
 	} else {
 		showWelcomeScreen();
 	}
@@ -82,8 +86,6 @@ function start(about: null | AboutPub): void {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-	loadContent();
-
 	load("prefs.json", { autoSave: true }).then(store => {
 		getGlobalContext().prefsStore = store;
 	});
