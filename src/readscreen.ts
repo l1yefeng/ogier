@@ -92,7 +92,7 @@ export class ReadScreen {
 					this.pageUrl = result[0];
 					percentage = result[1];
 				}
-				return this.reader.open(this.pageUrl, percentage, this);
+				return this.readPage(percentage);
 			})
 			.then(() => {
 				return this.initDetailsAndTocModals();
@@ -104,29 +104,33 @@ export class ReadScreen {
 		});
 	}
 
-	restartRefreshTocBtnLabelTask() {
-		this.refreshTocBtnLabelTask.restart(() => {
-			// TODO: optimize `mostRecentNavPoint`
-			const btn = NavModal.get().mostRecentNavPoint(
-				this.pageUrl.pathname,
-				this.reader.calculateOffsetPx(),
-				id => this.reader.calculateTargetOffsetPx(id) ?? 0,
-			);
-			const elemLabel = this.domContext.tocBtnLabel;
-			if (btn) {
-				elemLabel.lang = btn.closest<HTMLElement>("[lang]")?.lang!;
-				elemLabel.textContent = btn.textContent;
-			} else {
-				elemLabel.removeAttribute("lang");
-				elemLabel.textContent = toc_default_title;
-			}
-		});
+	async readPage(percentageOrId: string | number | null): Promise<void> {
+		this.refreshTocBtnLabelTask.stop();
+		await this.reader.open(this.pageUrl, percentageOrId, this.pubHelper.lang);
+		this.refreshTocBtnLabelTask.restart(this.#setTocBtnLabel);
 	}
+
+	#setTocBtnLabel = () => {
+		// TODO: optimize `mostRecentNavPoint`
+		const btn = NavModal.get().mostRecentNavPoint(
+			this.pageUrl.pathname,
+			this.reader.calculateOffsetPx(),
+			id => this.reader.calculateTargetOffsetPx(id) ?? 0,
+		);
+		const elemLabel = this.domContext.tocBtnLabel;
+		if (btn) {
+			elemLabel.lang = btn.closest<HTMLElement>("[lang]")?.lang!;
+			elemLabel.textContent = btn.textContent;
+		} else {
+			elemLabel.removeAttribute("lang");
+			elemLabel.textContent = toc_default_title;
+		}
+	};
 
 	handleKeyEvent(event: KeyboardEvent) {
 		if (event.key == "Escape") {
-			// TODO: make it Reader's method
-			this.reader.domContext.host.focus();
+			// TODO: focus on the reader so that Arrow Up/Down is useful
+			// this.reader.domContext.host.focus();
 		}
 
 		if (eventTargetIsCustomizationInput(event)) {
@@ -198,7 +202,7 @@ export class ReadScreen {
 		const percentage = this.reader.calculatePercentage();
 		this.jumpHistory.push([this.pageUrl, percentage]);
 		this.pageUrl = url;
-		this.reader.open(url, id, this);
+		this.readPage(id); // don't wait
 	}
 
 	moveInSpine(forward: boolean): void {
@@ -217,7 +221,7 @@ export class ReadScreen {
 		const percentage = forward ? 0.0 : 1.0;
 		// TODO: consider the impact to jump history
 		this.pageUrl = spine[index];
-		this.reader.open(this.pageUrl, percentage, this);
+		this.readPage(percentage); // don't wait
 	}
 
 	async initDetailsAndTocModals(): Promise<void> {

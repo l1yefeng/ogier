@@ -10,7 +10,6 @@ import {
 } from "./base";
 import { activateCustomizationInput, commitCustomStylesFromSaved } from "./custom";
 import * as rs from "./invoke";
-import { ReadScreen } from "./readscreen";
 import { Styler } from "./styler";
 
 /**
@@ -53,17 +52,13 @@ export class Reader {
 	styler: Styler;
 	pageLang: string = "";
 
-	async open(
-		url: URL,
-		percentageOrId: number | string | null,
-		screen: ReadScreen,
-	): Promise<void> {
+	async open(url: URL, percentageOrId: number | string | null, pubLang: string): Promise<void> {
 		// Remove every existing thing
 		this.domContext.shadowRoot.replaceChildren();
 
 		const doc = await fetchXml(url, true);
 		this.pageLang = doc.documentElement.lang;
-		this.domContext.host.lang = this.pageLang || screen.pubHelper.lang;
+		this.domContext.host.lang = this.pageLang || pubLang;
 
 		await this.processStyles(doc.head, url);
 		const body = doc.body;
@@ -86,7 +81,6 @@ export class Reader {
 			const percentage = this.calculatePercentage();
 			return rs.setReadingPosition(url, percentage);
 		});
-		screen.restartRefreshTocBtnLabelTask();
 
 		markSessionInProgress();
 	}
