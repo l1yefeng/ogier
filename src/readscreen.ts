@@ -104,6 +104,11 @@ export class ReadScreen {
 		});
 	}
 
+	deinit(): void {
+		this.reader.saveReadingProgressTask.stop();
+		this.refreshTocBtnLabelTask.stop();
+	}
+
 	async readPage(percentageOrId: string | number | null): Promise<void> {
 		this.refreshTocBtnLabelTask.stop();
 		await this.reader.open(this.pageUrl, percentageOrId, this.pubHelper.lang);

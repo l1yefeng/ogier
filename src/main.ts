@@ -55,6 +55,7 @@ function enableDragAndDrop(): void {
 }
 
 function startReading(aboutPub: AboutPub): void {
+	getGlobalContext().readScreen?.deinit();
 	getGlobalContext().readScreen = new ReadScreen(aboutPub);
 }
 
