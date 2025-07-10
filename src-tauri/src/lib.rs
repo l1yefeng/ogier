@@ -242,17 +242,25 @@ fn get_reading_position(
     window: Window,
     state: State<AppState>,
 ) -> Result<Option<(Url, Option<f64>)>, AnyErr> {
+    log::debug!("command get_reading_position");
     let progress_store = window.store(PROGRESS_STORE)?;
 
     let state_guard = state.lock().unwrap();
-    let hash = &state_guard.opened_pub.as_ref().unwrap().hash;
+    let opened = state_guard.opened_pub.as_ref().unwrap();
 
-    let Some(val) = progress_store.get(hash) else {
+    let Some(val) = progress_store.get(opened.hash) else {
         return Ok(None);
     };
-    let Ok(val) = serde_json::from_value(val) else {
+    let Ok(val) = serde_json::from_value::<(Url, Option<f64>)>(val) else {
+        log::warn!(" ignore invalid value in progress file");
         return Ok(None);
     };
+
+    // validate before responding
+    if !opened.pb.spine().contains(&val.0) {
+        log::warn!(" ignore unrecognized URL found in progress file");
+        return Ok(None);
+    }
 
     Ok(Some(val))
 }
