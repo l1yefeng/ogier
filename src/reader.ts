@@ -1,9 +1,6 @@
 import {
 	fetchXml,
 	FilewiseStyles,
-	getCurrentPosition,
-	getCurrentPositionInverse,
-	getCurrentPositionPx,
 	markSessionInProgress,
 	setElementUrl,
 	TaskRepeater,
@@ -13,19 +10,69 @@ import * as rs from "./invoke";
 import { Styler } from "./styler";
 
 class ReaderDomContext {
-	readonly host: HTMLElement;
+	#host: HTMLElement;
 	readonly shadowRoot: ShadowRoot;
 	#clickEventHandler: ((event: Event) => any) | null = null;
 
-	// TODO: move DOM access code to this class from Reader
-
-	get body(): HTMLElement {
-		return this.shadowRoot.querySelector("body")!;
+	constructor() {
+		this.#host = document.getElementById("og-reader-host") as HTMLDivElement;
+		this.shadowRoot = this.#host.attachShadow({ mode: "open" });
 	}
 
-	constructor() {
-		this.host = document.getElementById("og-reader-host") as HTMLDivElement;
-		this.shadowRoot = this.host.attachShadow({ mode: "open" });
+	get #body(): HTMLElement {
+		return this.shadowRoot.querySelector("body")!;
+	}
+	get #hostRect(): DOMRect {
+		return this.#host.getBoundingClientRect();
+	}
+	get #contentRect(): DOMRect {
+		return this.#body.getBoundingClientRect();
+	}
+
+	getViewPercentage(): number {
+		const box = this.#hostRect;
+		const content = this.#contentRect;
+		return (box.height / 5 - content.top) / content.height;
+	}
+	getViewOffsetPx(): number {
+		const box = this.#hostRect;
+		const content = this.#contentRect;
+		return box.height / 5 - content.top;
+	}
+	getViewOffsetPxFromPercentage(percentage: number): number {
+		const box = this.#hostRect;
+		const content = this.#contentRect;
+		return percentage * content.height - box.height / 5;
+	}
+
+	getElement(id: string): HTMLElement | null {
+		return this.shadowRoot.getElementById(id);
+	}
+
+	getElementOffsetPx(id: string): number | null {
+		const target = this.getElement(id);
+		if (target == null) return null;
+		return target.getBoundingClientRect().top - this.#contentRect.top;
+	}
+
+	scrollToElement(id: string): void {
+		this.getElement(id)?.scrollIntoView();
+	}
+
+	scrollToPercentage(percentage: number): void {
+		const top = this.getViewOffsetPxFromPercentage(percentage);
+		this.#host.scroll({ top, behavior: "instant" });
+	}
+
+	resetContent(): void {
+		this.shadowRoot.replaceChildren();
+	}
+	append(element: HTMLElement): void {
+		this.shadowRoot.appendChild(element);
+	}
+
+	set lang(value: string) {
+		this.#host.lang = value;
 	}
 
 	set handleClickEvent(listener: ((event: Event) => any) | null) {
@@ -52,28 +99,22 @@ export class Reader {
 	pageLang: string = "";
 
 	async open(url: URL, percentageOrId: number | string | null, pubLang: string): Promise<void> {
-		// Remove every existing thing
-		this.domContext.shadowRoot.replaceChildren();
+		this.domContext.resetContent();
 
 		const doc = await fetchXml(url, true);
 		this.pageLang = doc.documentElement.lang;
-		this.domContext.host.lang = this.pageLang || pubLang;
+		this.domContext.lang = this.pageLang || pubLang;
 
 		await this.processStyles(doc.head, url);
 		const body = doc.body;
 		this.processImages(body, url);
 		this.processAnchors(body, url);
 
-		this.domContext.shadowRoot.appendChild(body);
+		this.domContext.append(body);
 		if (typeof percentageOrId == "string") {
-			this.domContext.shadowRoot.getElementById(percentageOrId)?.scrollIntoView();
+			this.domContext.scrollToElement(percentageOrId);
 		} else if (percentageOrId) {
-			const top = getCurrentPositionInverse(
-				this.domContext.host.getBoundingClientRect(),
-				body.getBoundingClientRect(),
-				percentageOrId,
-			);
-			this.domContext.host.scroll({ top, behavior: "instant" });
+			this.domContext.scrollToPercentage(percentageOrId);
 		}
 
 		this.saveReadingProgressTask.restart(() => {
@@ -92,7 +133,7 @@ export class Reader {
 			const url = URL.parse(href, pageUrl);
 			if (url) {
 				setElementUrl(elemLink, url);
-				this.domContext.shadowRoot.appendChild(elemLink);
+				this.domContext.append(elemLink);
 			}
 		}
 
@@ -154,26 +195,19 @@ export class Reader {
 	}
 
 	calculatePercentage(): number {
-		const hostRect = this.domContext.host.getBoundingClientRect();
-		const bodyRect = this.domContext.body.getBoundingClientRect();
-		return getCurrentPosition(hostRect, bodyRect);
+		return this.domContext.getViewPercentage();
 	}
 
 	calculateOffsetPx(): number {
-		const hostRect = this.domContext.host.getBoundingClientRect();
-		const bodyRect = this.domContext.body.getBoundingClientRect();
-		return getCurrentPositionPx(hostRect, bodyRect);
+		return this.domContext.getViewOffsetPx();
 	}
 
 	calculateTargetOffsetPx(id: string): number | null {
-		const target = this.domContext.shadowRoot.getElementById(id);
-		if (target == null) return null;
-		const bodyRect = this.domContext.body.getBoundingClientRect();
-		return target.getBoundingClientRect().top - bodyRect.top;
+		return this.domContext.getElementOffsetPx(id);
 	}
 
 	getElementById(id: string): HTMLElement | null {
-		return this.domContext.shadowRoot.getElementById(id);
+		return this.domContext.getElement(id);
 	}
 
 	private constructor() {

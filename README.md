@@ -35,15 +35,16 @@ TODO
 
 ### Bugs
 
-- [ ] Window size does not preserve
+(None?)
 
 ### Optimizations
 
-- [ ] Menu has a large padding in front (Linux, KDE)
+- [ ] Menu has a large padding in front (Linux, KDE) in dev build
 - [ ] Open "Wild Life" faster.
 
 ### Features
 
+- [ ] q to quit
 - [ ] At the bottom, add <- and ->; when showing non-linear page,
       hide those and show a "back"; when jumped here show "back" in addition.
       To support those a history (stack) needs to be added to Context.
