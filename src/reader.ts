@@ -8,7 +8,7 @@ import {
 	setElementUrl,
 	TaskRepeater,
 } from "./base";
-import { activateCustomizationInput, commitCustomStylesFromSaved } from "./custom";
+import { FilewiseStylesEditor } from "./filewise";
 import * as rs from "./invoke";
 import { Styler } from "./styler";
 
@@ -86,6 +86,7 @@ export class Reader {
 	}
 
 	async processStyles(head: HTMLHeadElement, pageUrl: URL): Promise<void> {
+		// links are inserted to shadow DOM.
 		for (const elemLink of head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {
 			const href = elemLink.getAttribute("href");
 			if (!href) continue;
@@ -96,6 +97,7 @@ export class Reader {
 			}
 		}
 
+		// styler handles css in <style>s
 		let cssInPage = "";
 		for (const elemStyle of head.querySelectorAll<HTMLStyleElement>("style")) {
 			const css = elemStyle.textContent;
@@ -108,6 +110,7 @@ export class Reader {
 		// TODO(opt) can be parallel?
 		await this.styler.loadAppPrefs();
 
+		// styler handles filewise styles
 		let filewiseStyles: Partial<FilewiseStyles>;
 		try {
 			filewiseStyles = (await rs.getFilewiseStyles()) || {};
@@ -115,9 +118,9 @@ export class Reader {
 			console.error("Error loading saved filewise styles:", err);
 			filewiseStyles = {};
 		}
-		const localStylesCommit = (styles: FilewiseStyles) => (this.styler.filewiseStyles = styles);
-		commitCustomStylesFromSaved(filewiseStyles, localStylesCommit);
-		activateCustomizationInput(localStylesCommit, rs.setFilewiseStyles);
+		const commit = (styles: FilewiseStyles) => (this.styler.filewiseStyles = styles);
+		FilewiseStylesEditor.get().commitFromFile(filewiseStyles, commit);
+		FilewiseStylesEditor.get().setHandleChange(commit, rs.setFilewiseStyles);
 	}
 
 	processImages(body: HTMLElement, pageUrl: URL): void {

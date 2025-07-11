@@ -17,10 +17,10 @@ import {
 	TaskRepeater,
 	UrlAndPercentage,
 } from "./base";
-import { eventTargetIsCustomizationInput, loadCustomizationContent } from "./custom";
 import * as rs from "./invoke";
 import { DetailsModal, NavModal, PreviewModal } from "./modal";
 import { Reader } from "./reader";
+import { FilewiseStylesEditor } from "./filewise";
 
 class ReadScreenDomContext {
 	tocBtn: HTMLButtonElement;
@@ -34,9 +34,6 @@ class ReadScreenDomContext {
 	private constructor() {
 		this.tocBtn = document.getElementById("og-toc-button") as HTMLButtonElement;
 		this.tocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
-
-		// TODO: organize with new class FilewiseStylesEditor
-		loadCustomizationContent();
 
 		// Unhide the reader frame
 		const frame = document.getElementById("og-frame") as HTMLDivElement;
@@ -57,6 +54,7 @@ class ReadScreenDomContext {
 
 export class ReadScreen {
 	domContext: ReadScreenDomContext;
+	filewiseStylesEditor: FilewiseStylesEditor;
 	reader: Reader;
 	refreshTocBtnLabelTask: TaskRepeater;
 	pub: AboutPub;
@@ -70,6 +68,7 @@ export class ReadScreen {
 
 	constructor(aboutPub: AboutPub) {
 		this.domContext = ReadScreenDomContext.get();
+		this.filewiseStylesEditor = FilewiseStylesEditor.get();
 		this.reader = Reader.get();
 		this.refreshTocBtnLabelTask = new TaskRepeater(500);
 		this.pub = aboutPub;
@@ -138,7 +137,8 @@ export class ReadScreen {
 			// this.reader.domContext.host.focus();
 		}
 
-		if (eventTargetIsCustomizationInput(event)) {
+		if (false /* in input */) {
+			// TODO: let default happen if in <input>, <button>...
 			return;
 		}
 
