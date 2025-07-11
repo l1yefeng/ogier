@@ -22,7 +22,7 @@ export class PreviewModal extends BaseModal {
 	}
 
 	// Singleton
-	static self?: PreviewModal;
+	private static self?: PreviewModal;
 	static get(): PreviewModal {
 		if (!PreviewModal.self) PreviewModal.self = new PreviewModal();
 		return PreviewModal.self;

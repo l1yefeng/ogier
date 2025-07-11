@@ -8,7 +8,7 @@ export class GlobalContext {
 	private constructor() {}
 
 	// Singleton
-	static self?: GlobalContext;
+	private static self?: GlobalContext;
 	static get(): GlobalContext {
 		if (!GlobalContext.self) GlobalContext.self = new GlobalContext();
 		return GlobalContext.self;

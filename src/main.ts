@@ -64,7 +64,7 @@ function openChosenFileAt(path: string): Promise<void> {
 		.openEpub(path)
 		.then(about => {
 			showClickToOpen(false);
-			startReading(about); // don't wait
+			startReading(about);
 		})
 		.catch(window.alert);
 }
@@ -78,7 +78,7 @@ function showClickToOpen(yes: boolean): HTMLElement {
 
 function start(about: null | AboutPub): void {
 	if (about) {
-		startReading(about); // don't wait
+		startReading(about);
 	} else {
 		showWelcomeScreen();
 	}

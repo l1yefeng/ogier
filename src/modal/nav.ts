@@ -93,7 +93,7 @@ export class NavModal extends BaseModal {
 	}
 
 	// Singleton
-	static self?: NavModal;
+	private static self?: NavModal;
 	static get(): NavModal {
 		if (!NavModal.self) NavModal.self = new NavModal();
 		return NavModal.self;

@@ -54,7 +54,7 @@ export class DetailsModal extends BaseModal {
 	}
 
 	// Singleton
-	static self?: DetailsModal;
+	private static self?: DetailsModal;
 	static get(): DetailsModal {
 		if (!DetailsModal.self) DetailsModal.self = new DetailsModal();
 		return DetailsModal.self;

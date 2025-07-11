@@ -12,13 +12,12 @@ import { FilewiseStylesEditor } from "./filewise";
 import * as rs from "./invoke";
 import { Styler } from "./styler";
 
-/**
- * Group of components in DOM owned by Reader.
- */
 class ReaderDomContext {
 	readonly host: HTMLElement;
 	readonly shadowRoot: ShadowRoot;
 	#clickEventHandler: ((event: Event) => any) | null = null;
+
+	// TODO: move DOM access code to this class from Reader
 
 	get body(): HTMLElement {
 		return this.shadowRoot.querySelector("body")!;
@@ -177,17 +176,16 @@ export class Reader {
 		return this.domContext.shadowRoot.getElementById(id);
 	}
 
-	// Singleton
 	private constructor() {
 		this.domContext = new ReaderDomContext();
 		this.saveReadingProgressTask = new TaskRepeater(2000);
 		this.styler = new Styler(this.domContext.shadowRoot);
 	}
-	static self?: Reader;
+
+	// Singleton
+	private static self?: Reader;
 	static get(): Reader {
-		if (Reader.self == undefined) {
-			Reader.self = new Reader();
-		}
+		if (!Reader.self) Reader.self = new Reader();
 		return Reader.self;
 	}
 }

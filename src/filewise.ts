@@ -45,7 +45,7 @@ export class FilewiseStylesEditor {
 	domContext: FilewiseStylesEditorDomContext;
 
 	staged(): FilewiseStyles {
-		const value = this.domContext.value;
+		const value = (key: FilewiseStylesKey) => this.domContext.value(key);
 		return {
 			[FilewiseStylesKey.BaseFontSize]: value(FilewiseStylesKey.BaseFontSize),
 			[FilewiseStylesKey.LineHeightScale]: value(FilewiseStylesKey.LineHeightScale),
@@ -79,14 +79,14 @@ export class FilewiseStylesEditor {
 		};
 	}
 
-	// Singleton
 	private constructor() {
 		this.domContext = new FilewiseStylesEditorDomContext();
 	}
+
+	// Singleton
 	private static self?: FilewiseStylesEditor;
 	static get(): FilewiseStylesEditor {
-		if (FilewiseStylesEditor.self == undefined)
-			FilewiseStylesEditor.self = new FilewiseStylesEditor();
+		if (!FilewiseStylesEditor.self) FilewiseStylesEditor.self = new FilewiseStylesEditor();
 		return FilewiseStylesEditor.self;
 	}
 }

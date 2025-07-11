@@ -23,31 +23,44 @@ import { Reader } from "./reader";
 import { FilewiseStylesEditor } from "./filewise";
 
 class ReadScreenDomContext {
-	tocBtn: HTMLButtonElement;
-	tocBtnLabel: HTMLElement;
+	#tocBtn: HTMLButtonElement;
+	#tocBtnLabel: HTMLElement;
 
 	set handleKeyEvent(listener: (event: KeyboardEvent) => any) {
 		document.body.onkeydown = listener;
 	}
 
-	// Singleton
+	disableTocBtn() {
+		this.#tocBtn.disabled = true;
+		this.#tocBtn.title = toc_unavailable_message;
+	}
+
+	updateTocBtnLabel(text: string, lang: string) {
+		this.#tocBtnLabel.textContent = text;
+		this.#tocBtnLabel.lang = lang;
+	}
+
+	resetTocBtnLabel() {
+		this.#tocBtnLabel.removeAttribute("lang");
+		this.#tocBtnLabel.textContent = toc_default_title;
+	}
+
 	private constructor() {
-		this.tocBtn = document.getElementById("og-toc-button") as HTMLButtonElement;
-		this.tocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
+		this.#tocBtn = document.getElementById("og-toc-button") as HTMLButtonElement;
+		this.#tocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
 
 		// Unhide the reader frame
 		const frame = document.getElementById("og-frame") as HTMLDivElement;
 		frame.style.display = "";
 
 		// Assign handler to toc button (it's not necessarily enabled eventually)
-		this.tocBtn.onclick = () => NavModal.get().show();
+		this.#tocBtn.onclick = () => NavModal.get().show();
 	}
 
-	static self?: ReadScreenDomContext;
+	// Singleton
+	private static self?: ReadScreenDomContext;
 	static get(): ReadScreenDomContext {
-		if (ReadScreenDomContext.self == undefined) {
-			ReadScreenDomContext.self = new ReadScreenDomContext();
-		}
+		if (!ReadScreenDomContext.self) ReadScreenDomContext.self = new ReadScreenDomContext();
 		return ReadScreenDomContext.self;
 	}
 }
@@ -121,13 +134,13 @@ export class ReadScreen {
 			this.reader.calculateOffsetPx(),
 			id => this.reader.calculateTargetOffsetPx(id) ?? 0,
 		);
-		const elemLabel = this.domContext.tocBtnLabel;
 		if (btn) {
-			elemLabel.lang = btn.closest<HTMLElement>("[lang]")?.lang!;
-			elemLabel.textContent = btn.textContent;
+			this.domContext.updateTocBtnLabel(
+				btn.textContent!,
+				btn.closest<HTMLElement>("[lang]")!.lang,
+			);
 		} else {
-			elemLabel.removeAttribute("lang");
-			elemLabel.textContent = toc_default_title;
+			this.domContext.resetTocBtnLabel();
 		}
 	};
 
@@ -135,11 +148,14 @@ export class ReadScreen {
 		if (event.key == "Escape") {
 			// TODO: focus on the reader so that Arrow Up/Down is useful
 			// this.reader.domContext.host.focus();
+			// FIXME: currently nav modal returns with value even if esc
 		}
 
-		if (false /* in input */) {
-			// TODO: let default happen if in <input>, <button>...
-			return;
+		if (event.target instanceof Element) {
+			const elem = event.target;
+			if (elem.closest("input")) return;
+			if (elem.closest("button")) return;
+			if (elem.closest("dialog")) return;
 		}
 
 		if (event.key == "ArrowRight" || (event.ctrlKey && event.key == "PageDown")) {
@@ -242,8 +258,7 @@ export class ReadScreen {
 			await navModal.init(this.pub, this.pubHelper);
 		} catch (err) {
 			console.error("Error loading TOC:", err);
-			this.domContext.tocBtn.disabled = true;
-			this.domContext.tocBtn.title = toc_unavailable_message;
+			this.domContext.disableTocBtn();
 			return;
 		}
 		navModal.setupTocGoTo(url => this.jumpTo(url));
