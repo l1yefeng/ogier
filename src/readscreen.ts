@@ -1,11 +1,7 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-import {
-	end_of_spine_message,
-	toc_default_title,
-	toc_unavailable_message,
-} from "./strings.json";
+import { end_of_spine_message, toc_unavailable_message } from "./strings.json";
 
 import {
 	AboutPub,
@@ -22,7 +18,7 @@ import { FilewiseStylesEditor } from "./filewise";
 
 class ReadScreenDomContext {
 	#tocBtn: HTMLButtonElement;
-	#tocBtnLabel: HTMLElement;
+	readonly tocBtnLabel: HTMLElement;
 
 	set handleKeyEvent(listener: (event: KeyboardEvent) => any) {
 		document.body.onkeydown = listener;
@@ -33,19 +29,9 @@ class ReadScreenDomContext {
 		this.#tocBtn.title = toc_unavailable_message;
 	}
 
-	updateTocBtnLabel(text: string, lang: string) {
-		this.#tocBtnLabel.textContent = text;
-		this.#tocBtnLabel.lang = lang;
-	}
-
-	resetTocBtnLabel() {
-		this.#tocBtnLabel.removeAttribute("lang");
-		this.#tocBtnLabel.textContent = toc_default_title;
-	}
-
 	private constructor() {
 		this.#tocBtn = document.getElementById("og-toc-button") as HTMLButtonElement;
-		this.#tocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
+		this.tocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
 
 		// Unhide the reader frame
 		const frame = document.getElementById("og-frame") as HTMLDivElement;
@@ -114,28 +100,9 @@ export class ReadScreen {
 		this.refreshTocBtnLabelTask.stop();
 	}
 
-	async readPage(percentageOrId: string | number | null): Promise<void> {
-		this.refreshTocBtnLabelTask.stop();
-		await this.reader.open(this.pageUrl, percentageOrId, this.pubHelper.lang);
-		this.refreshTocBtnLabelTask.restart(this.#setTocBtnLabel);
+	readPage(percentageOrId: string | number | null): Promise<void> {
+		return this.reader.open(this.pageUrl, percentageOrId, this.pubHelper.lang);
 	}
-
-	#setTocBtnLabel = () => {
-		// TODO: optimize `mostRecentNavPoint`
-		const btn = NavModal.get().mostRecentNavPoint(
-			this.pageUrl.pathname,
-			this.reader.calculateOffsetPx(),
-			id => this.reader.calculateTargetOffsetPx(id) ?? 0,
-		);
-		if (btn) {
-			this.domContext.updateTocBtnLabel(
-				btn.textContent!,
-				btn.closest<HTMLElement>("[lang]")!.lang,
-			);
-		} else {
-			this.domContext.resetTocBtnLabel();
-		}
-	};
 
 	handleKeyEvent(event: KeyboardEvent) {
 		if (event.key == "Escape") {
@@ -244,7 +211,7 @@ export class ReadScreen {
 
 		const navModal = NavModal.get();
 		try {
-			await navModal.init(this.pub, this.pubHelper);
+			await navModal.init(this.pub, this.pubHelper, this.domContext.tocBtnLabel);
 		} catch (err) {
 			console.error("Error loading TOC:", err);
 			this.domContext.disableTocBtn();

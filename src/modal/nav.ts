@@ -1,6 +1,6 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
-import { AboutPub, fetchXml, PubHelper } from "../base";
+import { AboutPub, fetchXml, PubHelper, TaskRepeater } from "../base";
 import * as rs from "../invoke";
 
 import { toc_default_title } from "../strings.json";
@@ -16,9 +16,17 @@ export class NavModal extends BaseModal {
 	#title: HTMLElement;
 	#nav: HTMLElement;
 
-	#lastMostRecentNavPoint: HTMLButtonElement | null = null;
+	/**
+	 * A button in <nav>. It becomes disabled (because it's where the reader is).
+	 */
+	#closestNavPoint: HTMLButtonElement | null = null;
+	/**
+	 * A label outside this modal whose content will be linked to the closest nav point.
+	 */
+	#externalLabel?: HTMLElement;
+	#closestNavPointTask: TaskRepeater = new TaskRepeater(500);
 
-	async init(pub: AboutPub, pubHelper: PubHelper): Promise<void> {
+	async init(pub: AboutPub, pubHelper: PubHelper, externalLabel: HTMLElement): Promise<void> {
 		this.locked = false;
 		const { pubTocUrl: url, pubTocIsLegacy: isLegacy } = pub;
 		if (!url) {
@@ -31,11 +39,93 @@ export class NavModal extends BaseModal {
 		} else {
 			makeUiFromNav(doc, url, this.#nav, this.#title, pubHelper.lang);
 		}
+
+		this.#externalLabel = externalLabel;
+	}
+
+	stopClosestNavPointTask(): void {
+		this.#closestNavPointTask.stop();
+		this.#unsetClosestNavPoint();
+	}
+
+	/**
+	 * Should be called whenever the page being read is updated,
+	 * i.e., when the `getCurrentOffset` and `getTargetOffset` provided last time no longer applies.
+	 *
+	 * It has two purposes:
+	 * 1. Update NavModal's knowledge of the closest point, so that UI show its distinction.
+	 * 2. Update external label to match the closest point.
+	 *
+	 * @param url Current page URL
+	 * @param getCurrentOffset Getting the view offset in the current page
+	 * @param getTargetOffset Getting the offset of certain element in the current page
+	 */
+	restartClosestNavPointTask(
+		url: URL,
+		getCurrentOffset: () => number,
+		getTargetOffset: (id: string) => number | null,
+	): void {
+		const label = this.#externalLabel;
+		if (!label) return;
+
+		// Compute matched buttons here, not in task
+		const btns = this.#nav.querySelectorAll<HTMLButtonElement>(
+			`button[data-path="${url.pathname}"]`,
+		);
+
+		if (btns.length == 0) {
+			// shortcut: always default toc label, so don't repeat task
+			label.textContent = toc_default_title;
+			label.removeAttribute("lang");
+			this.#unsetClosestNavPoint();
+			return;
+		}
+		if (btns.length == 1) {
+			// shortcut: always the one, so don't repeat task
+			const btn = btns[0];
+			label.innerHTML = btn.innerHTML;
+			label.lang = btn.closest<HTMLElement>("[lang]")!.lang;
+			this.#setClosestNavPoint(btn);
+			return;
+		}
+
+		// the closest nav point will be located according to offsets,
+		// and this will be calculated repeatedly.
+		const navPoints: [HTMLButtonElement, number][] = Array.from(btns).map(btn => {
+			const id = btn.dataset.locationId;
+			const offset = id ? (getTargetOffset(id) ?? 0) : 0;
+			return [btn, offset];
+		});
+		navPoints.sort((a, b) => b[1] - a[1]); // offset high to low
+
+		const task = () => {
+			const viewOffset = getCurrentOffset();
+			const [btn, _offset] =
+				navPoints.find(([_btn, offset]) => offset <= viewOffset) ??
+				navPoints[navPoints.length - 1];
+			label.innerHTML = btn.innerHTML;
+			label.lang = btn.closest<HTMLElement>("[lang]")!.lang;
+			this.#setClosestNavPoint(btn);
+		};
+		this.#closestNavPointTask.restart(task);
+	}
+
+	#unsetClosestNavPoint() {
+		if (this.#closestNavPoint) {
+			this.#closestNavPoint.autofocus = false;
+			this.#closestNavPoint.disabled = false;
+		}
+	}
+	#setClosestNavPoint(btn: HTMLButtonElement) {
+		this.#unsetClosestNavPoint();
+		btn.autofocus = true;
+		btn.disabled = true;
+		this.#closestNavPoint = btn;
 	}
 
 	show(): void {
 		if (ModalCoordinator.show(this)) {
-			this.#lastMostRecentNavPoint?.scrollIntoView();
+			this.#closestNavPoint?.scrollIntoView();
 		}
 	}
 
@@ -44,44 +134,6 @@ export class NavModal extends BaseModal {
 			// If there is no hash, locationId is undefined.
 			await navigate(URL.parse(value)!);
 		});
-	}
-
-	mostRecentNavPoint(
-		currentPath: string,
-		offset: number,
-		getAnchoredOffset: (id: string) => number,
-	): HTMLButtonElement | null {
-		const buttons = this.#nav.querySelectorAll<HTMLButtonElement>(
-			`button[data-path="${currentPath}"]`,
-		);
-		if (buttons.length == 0) {
-			return null;
-		}
-
-		let mostRecent: [number, HTMLButtonElement] | null = null;
-		for (const btn of buttons) {
-			const anchoredOffset = btn.dataset.locationId
-				? getAnchoredOffset(btn.dataset.locationId)
-				: 0;
-			if (offset >= anchoredOffset) {
-				if (mostRecent == null || anchoredOffset >= mostRecent[0]) {
-					mostRecent = [anchoredOffset, btn];
-				}
-			}
-		}
-
-		if (mostRecent) {
-			const [_, btn] = mostRecent;
-			if (this.#lastMostRecentNavPoint) {
-				this.#lastMostRecentNavPoint.autofocus = false;
-				this.#lastMostRecentNavPoint.disabled = false;
-			}
-			btn.autofocus = true;
-			btn.disabled = true;
-			this.#lastMostRecentNavPoint = btn;
-			return btn;
-		}
-		return null;
 	}
 
 	private constructor() {

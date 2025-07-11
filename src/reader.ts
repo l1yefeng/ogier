@@ -7,6 +7,7 @@ import {
 } from "./base";
 import { FilewiseStylesEditor } from "./filewise";
 import * as rs from "./invoke";
+import { NavModal } from "./modal";
 import { Styler } from "./styler";
 
 class ReaderDomContext {
@@ -100,6 +101,7 @@ export class Reader {
 
 	async open(url: URL, percentageOrId: number | string | null, pubLang: string): Promise<void> {
 		this.domContext.resetContent();
+		NavModal.get().stopClosestNavPointTask();
 
 		const doc = await fetchXml(url, true);
 		this.pageLang = doc.documentElement.lang;
@@ -121,6 +123,12 @@ export class Reader {
 			const percentage = this.calculatePercentage();
 			return rs.setReadingPosition(url, percentage);
 		});
+
+		NavModal.get().restartClosestNavPointTask(
+			url,
+			() => this.domContext.getViewOffsetPx(),
+			id => this.domContext.getElementOffsetPx(id),
+		);
 
 		markSessionInProgress();
 	}
@@ -196,14 +204,6 @@ export class Reader {
 
 	calculatePercentage(): number {
 		return this.domContext.getViewPercentage();
-	}
-
-	calculateOffsetPx(): number {
-		return this.domContext.getViewOffsetPx();
-	}
-
-	calculateTargetOffsetPx(id: string): number | null {
-		return this.domContext.getElementOffsetPx(id);
 	}
 
 	getElementById(id: string): HTMLElement | null {
