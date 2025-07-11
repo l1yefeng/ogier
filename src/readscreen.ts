@@ -1,4 +1,3 @@
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -11,7 +10,6 @@ import {
 import {
 	AboutPub,
 	anchoredSamePageLocation,
-	FontPrefer,
 	isLocationNear,
 	PubHelper,
 	TaskRepeater,
@@ -109,11 +107,6 @@ export class ReadScreen {
 			.then(() => {
 				return this.initDetailsAndTocModals();
 			});
-
-		// TODO re-evaluate position for this
-		getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", () => {
-			this.reader.styler.loadAppPrefs();
-		});
 	}
 
 	deinit(): void {
@@ -246,12 +239,8 @@ export class ReadScreen {
 	}
 
 	async initDetailsAndTocModals(): Promise<void> {
-		const webWindow = getCurrentWebviewWindow();
-
 		const detailsModal = DetailsModal.get();
 		detailsModal.init(this.pub, this.pubHelper);
-
-		webWindow.listen("menu/f_d", () => detailsModal.show());
 
 		const navModal = NavModal.get();
 		try {
@@ -262,8 +251,6 @@ export class ReadScreen {
 			return;
 		}
 		navModal.setupTocGoTo(url => this.jumpTo(url));
-
-		webWindow.listen("menu/f_n", () => navModal.show());
 	}
 
 	findPreviewContent(elemLocation: HTMLElement): HTMLElement {

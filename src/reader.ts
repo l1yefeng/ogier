@@ -180,6 +180,10 @@ export class Reader {
 		this.domContext = new ReaderDomContext();
 		this.saveReadingProgressTask = new TaskRepeater(2000);
 		this.styler = new Styler(this.domContext.shadowRoot);
+
+		rs.setMenuHandlerForViewFontPrefers(() => {
+			this.styler.loadAppPrefs();
+		});
 	}
 
 	// Singleton

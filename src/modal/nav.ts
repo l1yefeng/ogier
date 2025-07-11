@@ -1,6 +1,7 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
 import { AboutPub, fetchXml, PubHelper } from "../base";
+import * as rs from "../invoke";
 
 import { toc_default_title } from "../strings.json";
 
@@ -16,15 +17,6 @@ export class NavModal extends BaseModal {
 	#nav: HTMLElement;
 
 	#lastMostRecentNavPoint: HTMLButtonElement | null = null;
-
-	private constructor() {
-		super(document.getElementById("og-toc-modal") as HTMLDialogElement);
-		this.locked = true;
-		this.#title = document.getElementById("og-toc-title") as HTMLDivElement;
-		this.#nav = document.getElementById("og-toc-nav") as HTMLElement;
-
-		ModalCoordinator.modals["nav"] = this;
-	}
 
 	async init(pub: AboutPub, pubHelper: PubHelper): Promise<void> {
 		this.locked = false;
@@ -90,6 +82,17 @@ export class NavModal extends BaseModal {
 			return btn;
 		}
 		return null;
+	}
+
+	private constructor() {
+		super(document.getElementById("og-toc-modal") as HTMLDialogElement);
+		this.locked = true;
+		this.#title = document.getElementById("og-toc-title") as HTMLDivElement;
+		this.#nav = document.getElementById("og-toc-nav") as HTMLElement;
+
+		ModalCoordinator.modals["nav"] = this;
+
+		rs.setMenuHandlerFotFileNavigate(() => this.show());
 	}
 
 	// Singleton

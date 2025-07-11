@@ -1,8 +1,7 @@
 /**
  * Export all backend (rust) APIs.
- * `invoke` from Tauri API should not be used anywhere outside this file.
- *
- * TODO: include listeners.
+ * `invoke` or `listen` from Tauri API should not be used anywhere
+ * outside this file.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -11,9 +10,12 @@ import {
 	AboutPub,
 	AboutPubJson,
 	FilewiseStyles,
+	FontPrefer,
 	UrlAndPercentage,
 	aboutPubFromJson,
 } from "./base";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { PhysicalPosition } from "@tauri-apps/api/window";
 
 export function getFilewiseStyles(): Promise<Partial<FilewiseStyles> | null> {
 	return invoke<string>("get_filewise_styles").then(savedSettings => {
@@ -56,4 +58,29 @@ export function getReadingPosition(): Promise<UrlAndPercentage | null> {
 		const [url, percentage] = res;
 		return [URL.parse(url)!, percentage];
 	});
+}
+
+export function setDragDropHandler(handler: (paths: string[]) => any): void {
+	getCurrentWebviewWindow().listen<{
+		paths: string[];
+		position: PhysicalPosition;
+	}>("tauri://drag-drop", event => handler(event.payload.paths));
+}
+
+export function setMenuHandlerForFileOpen(handler: () => any): void {
+	getCurrentWebviewWindow().listen("menu/f_o", handler);
+}
+
+export function setMenuHandlerFotFileDetails(handler: () => any): void {
+	getCurrentWebviewWindow().listen("menu/f_d", handler);
+}
+
+export function setMenuHandlerFotFileNavigate(handler: () => any): void {
+	getCurrentWebviewWindow().listen("menu/f_n", handler);
+}
+
+export function setMenuHandlerForViewFontPrefers(
+	handler: (fontPrefer: FontPrefer) => any,
+): void {
+	getCurrentWebviewWindow().listen<FontPrefer>("menu/v_fp", event => handler(event.payload));
 }

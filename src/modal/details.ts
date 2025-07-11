@@ -1,21 +1,12 @@
 import { BaseModal, ModalCoordinator } from "./base";
 
 import { AboutPub, EpubMetadataItem, PubHelper, setElementUrl } from "../base";
+import * as rs from "../invoke";
 
 export class DetailsModal extends BaseModal {
 	#bookDl: HTMLDListElement;
 	#fileDl: HTMLDListElement;
 	#coverImg: HTMLImageElement;
-
-	private constructor() {
-		super(document.getElementById("og-details-modal") as HTMLDialogElement);
-		this.locked = true;
-		this.#bookDl = document.getElementById("og-details-book") as HTMLDListElement;
-		this.#fileDl = document.getElementById("og-details-file") as HTMLDListElement;
-		this.#coverImg = document.getElementById("og-details-cover") as HTMLImageElement;
-
-		ModalCoordinator.modals["details"] = this;
-	}
 
 	init(pub: AboutPub, pubHelper: PubHelper): void {
 		this.locked = false;
@@ -51,6 +42,18 @@ export class DetailsModal extends BaseModal {
 
 	show(): void {
 		ModalCoordinator.show(this);
+	}
+
+	private constructor() {
+		super(document.getElementById("og-details-modal") as HTMLDialogElement);
+		this.locked = true;
+		this.#bookDl = document.getElementById("og-details-book") as HTMLDListElement;
+		this.#fileDl = document.getElementById("og-details-file") as HTMLDListElement;
+		this.#coverImg = document.getElementById("og-details-cover") as HTMLImageElement;
+
+		ModalCoordinator.modals["details"] = this;
+
+		rs.setMenuHandlerFotFileDetails(() => this.show());
 	}
 
 	// Singleton

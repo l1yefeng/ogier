@@ -2,8 +2,6 @@
  * The entry file, imported in HTML directly.
  */
 
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { PhysicalPosition } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
 
@@ -34,11 +32,7 @@ function showWelcomeScreen(): void {
 }
 
 function enableDragAndDrop(): void {
-	getCurrentWebviewWindow().listen<{
-		paths: string[];
-		position: PhysicalPosition;
-	}>("tauri://drag-drop", event => {
-		const paths = event.payload.paths;
+	rs.setDragDropHandler(paths => {
 		if (paths.length == 0) {
 		} else if (paths.length > 1) {
 			window.alert(file_picker_multiple_file_alert);
@@ -83,7 +77,7 @@ function start(about: null | AboutPub): void {
 		showWelcomeScreen();
 	}
 	enableDragAndDrop();
-	getCurrentWebviewWindow().listen("menu/f_o", chooseAndMaybeOpenFile);
+	rs.setMenuHandlerForFileOpen(chooseAndMaybeOpenFile);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
