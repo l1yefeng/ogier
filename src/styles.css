@@ -92,6 +92,11 @@ input {
 		}
 	}
 
+	button > img {
+		vertical-align: text-bottom;
+		height: 1.25em;
+	}
+
 	label.og-starting-icon {
 		border: 1px solid gray;
 		border-style: inset;
@@ -125,6 +130,10 @@ input {
 		&:hover {
 			background-color: var(--color-active-control-background);
 			outline: 1px solid var(--color-active-control-outline);
+		}
+
+		&:disabled:hover {
+			background-color: unset;
 		}
 	}
 }

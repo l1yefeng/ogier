@@ -35,19 +35,18 @@ TODO
 
 ### Bugs
 
-(None?)
+- [ ] Can select text on footer!
 
 ### Optimizations
 
+- [ ] Btns on footer should not move.
+- [ ] SVG color lighter when btn is disabled.
 - [ ] Menu has a large padding in front (Linux, KDE) in dev build
 - [ ] Open "Wild Life" faster.
 
 ### Features
 
 - [ ] q to quit
-- [ ] At the bottom, add <- and ->; when showing non-linear page,
-      hide those and show a "back"; when jumped here show "back" in addition.
-      To support those a history (stack) needs to be added to Context.
 - [ ] Fetch font from archive
 - [ ] Other methods to customize reader (when UI is too narrow).
 - [ ] Dark theme.

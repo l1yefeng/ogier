@@ -1,4 +1,7 @@
 const ICONS = [
+	"arrow_hook_up_left",
+	"arrow_next",
+	"arrow_previous",
 	"book",
 	"document_margins",
 	"notebook_arrow_curve_down",

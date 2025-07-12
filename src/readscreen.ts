@@ -19,6 +19,9 @@ import { FilewiseStylesEditor } from "./filewise";
 class ReadScreenDomContext {
 	#tocBtn: HTMLButtonElement;
 	readonly tocBtnLabel: HTMLElement;
+	#prevBtn: HTMLButtonElement;
+	#nextBtn: HTMLButtonElement;
+	#backBtn: HTMLButtonElement;
 
 	set handleKeyEvent(listener: (event: KeyboardEvent) => any) {
 		document.body.onkeydown = listener;
@@ -29,9 +32,32 @@ class ReadScreenDomContext {
 		this.#tocBtn.title = toc_unavailable_message;
 	}
 
+	setNavBtnsUsability(showMove: [boolean, boolean] | null, showBack: boolean) {
+		if (showMove) {
+			this.#prevBtn.style.visibility = "initial";
+			this.#nextBtn.style.visibility = "initial";
+			const [enablePrev, enableNext] = showMove;
+			this.#prevBtn.disabled = !enablePrev;
+			this.#nextBtn.disabled = !enableNext;
+		} else {
+			this.#prevBtn.style.visibility = "hidden";
+			this.#nextBtn.style.visibility = "hidden";
+		}
+		this.#backBtn.style.visibility = showBack ? "initial" : "hidden";
+	}
+
+	setNavBtnsHandlers(onMove: (forward: boolean) => any, onBack: () => any) {
+		this.#prevBtn.onclick = () => onMove(false);
+		this.#nextBtn.onclick = () => onMove(true);
+		this.#backBtn.onclick = onBack;
+	}
+
 	private constructor() {
 		this.#tocBtn = document.getElementById("og-toc-button") as HTMLButtonElement;
 		this.tocBtnLabel = document.getElementById("og-toc-button-label") as HTMLElement;
+		this.#prevBtn = document.getElementById("og-nav-btn-prev") as HTMLButtonElement;
+		this.#nextBtn = document.getElementById("og-nav-btn-next") as HTMLButtonElement;
+		this.#backBtn = document.getElementById("og-nav-btn-back") as HTMLButtonElement;
 
 		// Unhide the reader frame
 		const frame = document.getElementById("og-frame") as HTMLDivElement;
@@ -93,6 +119,12 @@ export class ReadScreen {
 			.then(() => {
 				return this.initDetailsAndTocModals();
 			});
+
+		// Update button listener
+		this.domContext.setNavBtnsHandlers(
+			forward => this.moveInSpine(forward),
+			() => this.jumpBack(),
+		);
 	}
 
 	deinit(): void {
@@ -100,8 +132,13 @@ export class ReadScreen {
 		this.refreshTocBtnLabelTask.stop();
 	}
 
-	readPage(percentageOrId: string | number | null): Promise<void> {
-		return this.reader.open(this.pageUrl, percentageOrId, this.pubHelper.lang);
+	async readPage(percentageOrId: string | number | null): Promise<void> {
+		const index = this.pageIndexInSpine;
+		this.domContext.setNavBtnsUsability(
+			index != undefined ? [index > 0, index + 1 < this.pub.pubSpine.length] : null,
+			this.jumpHistory.length > 0,
+		);
+		await this.reader.open(this.pageUrl, percentageOrId, this.pubHelper.lang);
 	}
 
 	handleKeyEvent(event: KeyboardEvent) {
@@ -186,6 +223,15 @@ export class ReadScreen {
 		this.readPage(id); // don't wait
 	}
 
+	jumpBack(): void {
+		const location = this.jumpHistory.pop();
+		if (location == undefined) return;
+
+		const [url, percentage] = location;
+		this.pageUrl = url;
+		this.readPage(percentage); // don't wait
+	}
+
 	moveInSpine(forward: boolean): void {
 		const spine = this.pub.pubSpine;
 		let index = this.pageIndexInSpine;
@@ -200,7 +246,7 @@ export class ReadScreen {
 			return;
 		}
 		const percentage = forward ? 0.0 : 1.0;
-		// TODO: consider the impact to jump history
+		this.jumpHistory = [];
 		this.pageUrl = spine[index];
 		this.readPage(percentage); // don't wait
 	}
