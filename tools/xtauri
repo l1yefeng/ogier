@@ -1,0 +1,48 @@
+#!/usr/bin/env bun
+
+/**
+ * Execute tauri.
+ * This injects SVG icon as env var to be substituted in HTML.
+ *
+ * E.g., %VITE_SVG_FLUENT_ICON_SOMETHING_NICE% in index.html
+ *       will be transformed to the SVG from something_nice_<variant>.svg
+ */
+
+const iconsEnv = await fluentIconsEnv();
+const proc = Bun.spawn(["bunx", "tauri", ...Bun.argv.slice(2)], {
+	env: { ...Bun.env, ...iconsEnv },
+	stderr: "inherit",
+	stdout: "inherit",
+});
+await proc.exited;
+
+async function fluentIconsEnv(): Promise<Record<string, string>> {
+	const ICONS = [
+		"arrow_hook_up_left",
+		"arrow_next",
+		"arrow_previous",
+		"book",
+		"document_margins",
+		"notebook_arrow_curve_down",
+		"text_font_size",
+		"text_line_spacing",
+	];
+
+	const entries = await Promise.all(ICONS.map(fluentIconSvgXml));
+	return Object.fromEntries(entries);
+}
+
+async function fluentIconSvgXml(name: string): Promise<[string, string]> {
+	for (let size = 24; size > 0; size -= 2) {
+		const filename = `${name}_${size}_regular.svg`;
+		const input = Bun.file(`node_modules/@fluentui/svg-icons/icons/${filename}`);
+		if (!(await input.exists())) {
+			continue;
+		}
+		return [`VITE_SVG_FLUENT_ICON_${name.toUpperCase()}`, await input.text()];
+	}
+
+	throw new Error(`Icon ${name} not found.`);
+}
+
+export {};

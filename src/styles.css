@@ -83,18 +83,15 @@ input {
 		margin-inline-start: 2px;
 	}
 
-	.og-starting-icon {
+	.og-starting-icon,
+	.og-icon-btn {
 		display: inline-block;
 
-		img {
+		svg {
 			vertical-align: text-bottom;
 			height: 1.25em;
+			fill: var(--color-ui-fg);
 		}
-	}
-
-	button > img {
-		vertical-align: text-bottom;
-		height: 1.25em;
 	}
 
 	label.og-starting-icon {
