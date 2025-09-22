@@ -3,7 +3,7 @@
  */
 
 import { open } from "@tauri-apps/plugin-dialog";
-import { load } from "@tauri-apps/plugin-store";
+import { LazyStore } from "@tauri-apps/plugin-store";
 
 import { file_picker_multiple_file_alert, file_picker_not_epub_alert } from "./strings.json";
 
@@ -81,9 +81,7 @@ function start(about: null | AboutPub): void {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-	load("prefs.json", { autoSave: true }).then(store => {
-		getGlobalContext().prefsStore = store;
-	});
+	getGlobalContext().prefsStore = new LazyStore("prefs.json");
 
 	if (takeSessionInProgress()) {
 		rs.reloadBook()

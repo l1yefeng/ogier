@@ -10,18 +10,18 @@
 		"preview": "vite preview"
 	},
 	"dependencies": {
-		"@tauri-apps/api": "^2.6.0",
-		"@tauri-apps/plugin-dialog": "^2.3.0",
-		"@tauri-apps/plugin-log": "^2.6.0",
-		"@tauri-apps/plugin-opener": "^2.4.0",
-		"@tauri-apps/plugin-store": "^2.3.0"
+		"@tauri-apps/api": "^2.8.0",
+		"@tauri-apps/plugin-dialog": "^2.4.0",
+		"@tauri-apps/plugin-log": "^2.7.0",
+		"@tauri-apps/plugin-opener": "^2.5.0",
+		"@tauri-apps/plugin-store": "^2.4.0"
 	},
 	"devDependencies": {
-		"@fluentui/svg-icons": "^1.1.306",
-		"@tauri-apps/cli": "^2.6.2",
-		"@types/bun": "^1.2.18",
+		"@fluentui/svg-icons": "^1.1.310",
+		"@tauri-apps/cli": "^2.8.4",
+		"@types/bun": "^1.2.22",
 		"prettier": "^3.6.2",
-		"typescript": "^5.8.3",
-		"vite": "^6.3.5"
+		"typescript": "^5.9.2",
+		"vite": "^6.3.6"
 	}
 }

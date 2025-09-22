@@ -1,9 +1,9 @@
-import { Store } from "@tauri-apps/plugin-store";
+import { LazyStore } from "@tauri-apps/plugin-store";
 import { ReadScreen } from "./readscreen";
 
 export class GlobalContext {
 	readScreen?: ReadScreen;
-	prefsStore?: Store;
+	prefsStore?: LazyStore;
 
 	private constructor() {}
 
